@@ -1,6 +1,6 @@
 {
   "name": "@shuji-bonji/pdf-constraints",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Machine-checkable constraint tables mapping ISO 32000 clauses to PDF structural conditions, with a deterministic evaluator. A mapping layer — it does not quote the specification, and it cannot prove conformance",
   "keywords": [
     "pdf",
@@ -31,7 +31,8 @@
   },
   "files": [
     "dist",
-    "tables"
+    "tables",
+    "README.ja.md"
   ],
   "scripts": {
     "build": "tsc && chmod +x dist/cli.js",

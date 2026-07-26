@@ -4,118 +4,116 @@
 [![npm version](https://img.shields.io/npm/v/@shuji-bonji/pdf-constraints.svg)](https://www.npmjs.com/package/@shuji-bonji/pdf-constraints)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-ISO 32000 の条文を「**ファイルが構造上どういう状態か**」へ写像した制約テーブルと、その決定論的評価器です。
+[日本語](./README.ja.md)
 
-これは PDF family の共有基盤ライブラリで、MCP サーバではありません。
-MCP としての露出は [pdf-verify-mcp](https://github.com/shuji-bonji/pdf-verify-mcp) の `validate_clauses` が担います。
+Constraint tables that map ISO 32000 clauses to **what a file has to look like structurally**, together with a deterministic evaluator.
 
-## 何のためのものか
+This is a shared library for the PDF family, not an MCP server. It is exposed over MCP through [pdf-verify-mcp](https://github.com/shuji-bonji/pdf-verify-mcp)'s `validate_clauses`.
 
-family の各メンバーが答える問いを並べると、このパッケージの位置が決まります。
+## What it is for
 
-| 誰が | 答える問い |
+Lining up the question each family member answers puts this package in place:
+
+| Who | Question it answers |
 |---|---|
-| [pdf-spec-mcp](https://github.com/shuji-bonji/pdf-spec-mcp) | 条文は**何を要求する**か |
-| [pdf-reader-mcp](https://github.com/shuji-bonji/pdf-reader-mcp) | ファイルに**何がある**か |
-| **pdf-constraints** | **条文を満たすとはどういう状態か** |
-| [pdf-verify-mcp](https://github.com/shuji-bonji/pdf-verify-mcp) | **どこが破られている**か |
-| [pdf-writer-mcp](https://github.com/shuji-bonji/pdf-writer-mcp) | それを**どう書く**か |
+| [pdf-spec-mcp](https://github.com/shuji-bonji/pdf-spec-mcp) | What does the clause **require**? |
+| [pdf-reader-mcp](https://github.com/shuji-bonji/pdf-reader-mcp) | What **is** in the file? |
+| **pdf-constraints** | **What state does satisfying the clause mean?** |
+| [pdf-verify-mcp](https://github.com/shuji-bonji/pdf-verify-mcp) | **What has been broken?** |
+| [pdf-writer-mcp](https://github.com/shuji-bonji/pdf-writer-mcp) | How do you **write** it? |
 
-veraPDF は PDF/A・PDF/UA を判定しますが、**ISO 32000 本体の条文違反は見ません**。
-そこが空いていたために「CFF フォントを `FontFile2` で埋め込む」という shall 違反が、
-ビューアの警告として「無害」と誤分類されたまま残ったことがあります。本パッケージはその穴を埋めます。
+veraPDF decides PDF/A and PDF/UA, but it does not look at the **body of ISO 32000**. That gap is why a `shall` violation — embedding a CFF font program under `/FontFile2` — survived as nothing more than a viewer warning that had been filed under "harmless".
 
 > [!IMPORTANT]
-> **fail が無いことは適合の証明ではありません。** 「収録した制約の範囲で反証できなかった」以上を意味しません。
-> 適合は証明できず、反証できるだけです。
+> **No failures is not proof of conformance.** It means nothing in the constraints that shipped could be disproved. Conformance cannot be proven, only disproven.
 
-## 使い方
+## Usage
 
 ```sh
 npx @shuji-bonji/pdf-constraints check document.pdf
 npx @shuji-bonji/pdf-constraints check document.pdf --domain font-embedding --given isSubset=true
 ```
 
-終了コードは 3 値です。**判定できなかったことを合格や違反と混ぜません**。
+Three exit codes, because **"could not decide" must not be confused with pass or fail**:
 
-| code | 意味 |
+| Code | Meaning |
 |---|---|
-| 0 | 収録した制約では違反を見つけられなかった（適合の証明ではない） |
-| 1 | 違反あり |
-| 2 | 判定不能（ファイルが開けない・引数不正など） |
+| 0 | No violation found in the constraints checked (not proof of conformance) |
+| 1 | Violations found |
+| 2 | Could not decide (file unreadable, bad arguments, and so on) |
 
-ライブラリとして:
+As a library:
 
 ```ts
 import { checkFile, loadTable, evaluateConstraint } from '@shuji-bonji/pdf-constraints';
 
 const report = await checkFile('/abs/path/document.pdf', { given: { isSubset: true } });
-report.violations;      // 違反数
-report.packageVersion;  // どの版のテーブルで判定したか（決定論の由来）
+report.violations;      // number of failures
+report.packageVersion;  // which version decided this — the provenance of the determinism
 ```
 
-制約テーブル（JSON）は直接読めます。
+The constraint tables are plain JSON and can be read directly:
 
 ```ts
 import table from '@shuji-bonji/pdf-constraints/tables/font-embedding.json' with { type: 'json' };
 ```
 
-## 収録テーブル
+## Bundled tables
 
-| ドメイン | 条文 | 制約 |
+| Domain | Clauses | Constraints |
 |---|---|---|
-| `font-embedding` | §9.9.1 / §9.9.2 / §9.7.4.2（Table 124 / 125 含む） | CT-FONT-1〜5 — 埋め込みキーと中身の一致、サブセット名タグ、`Length1` |
-| `document-metadata` | §14.3.2 / §14.3.3 / §14.3.4 / §7.9.4 | CT-META-1〜6 — メタデータストリームの型、日付書式、Info↔XMP の等価、`Trapped` |
+| `font-embedding` | §9.9.1 / §9.9.2 / §9.7.4.2 (including Tables 124 and 125) | CT-FONT-1〜5 — the embedding key matching the program inside it, subset name tags, `Length1` |
+| `document-metadata` | §14.3.2 / §14.3.3 / §14.3.4 / §7.9.4 | CT-META-1〜6 — metadata stream type, date syntax, Info↔XMP equivalence, `Trapped` |
 
-## 4 つの状態
+## Four states
 
-制約ごとに次のどれかを返します。**verdict（推奨判定）は出しません** — それは
-pdf-verify-mcp の `evaluate_policy` の役割です。
+Every constraint resolves to one of these. **No verdict is issued** — that is the job of
+pdf-verify-mcp's `evaluate_policy`.
 
-| 状態 | 意味 |
+| State | Meaning |
 |---|---|
-| `pass` | 収録した検査では反証できなかった |
-| `fail` | 反証できた |
-| `not_applicable` | 適用条件を満たさない（この文書には関係ない条文） |
-| `needs_external_fact` | 外部事実が供給されておらず判定に到達できない |
+| `pass` | Nothing in this constraint could be disproved |
+| `fail` | Disproved (the fact and its measured value come back as evidence) |
+| `not_applicable` | The clause does not apply to this document |
+| `needs_external_fact` | A fact outside the file was not supplied, so the constraint **was not decided** |
 
-### `given.*` — ファイルの外にある事実
+### `given.*` — facts that live outside the file
 
-条文には、ファイル単体からは判定できない前提を持つものがあります。たとえば
-R-9.9.2-2「**サブセットフォントの**名前は 6 大文字タグで始まる shall」の「サブセットか否か」は、
-PDF の中には書かれていません（作った側だけが知っている）。
+Some clauses rest on a premise the file cannot settle. R-9.9.2-2 says the name of **a subset font**
+shall begin with a six-letter tag — but whether a font is a subset is not written anywhere in the
+PDF. Only whoever made it knows.
 
-こうした事実は `--given isSubset=true` で供給します。渡さなければ、その制約は
-`needs_external_fact` に縮退します — **既定値で埋めて沈黙合格や冤罪を作らない**ためです。
+Supply such facts with `--given isSubset=true`. Without them the constraint degrades to
+`needs_external_fact`, rather than being **defaulted into a silent pass or a false accusation**.
 
-### 「違反」と「違反の痕跡」
+### "Violation" versus "trace of a violation"
 
-条文の主語が PDF processor（書き込み行為）である場合、ファイルから観測できるのは
-**誰かが破った痕跡**であって、直近の書き手の違反とは限りません（§14.3.4 は、既存の不整合を
-そのまま残すことを許しています）。そうした制約は `subjectNote` を持ち、レポートでも
-「違反の痕跡」と述べます。
+When a clause addresses the PDF processor — the act of writing — all a file can show is that
+**someone** broke it, not that the last writer did (§14.3.4 explicitly permits leaving an existing
+inconsistency alone). Those constraints carry a `subjectNote`, and the report words their failures
+as traces.
 
-## やらないこと
+## What it does not do
 
-- **条文原文の提供** — pdf-spec-mcp の役割です。テーブルは clause ID で参照するだけで原文を複製しません
-- **適合の証明** — 反証できるだけです
-- **verdict・推奨判定** — `evaluate_policy` の役割です
-- **veraPDF の代替** — PDF/A の判定主体は veraPDF です。収録は ISO 32000-1/-2 本体条文のみ
-- **内容の真偽判定** — 条文に適合したファイルが嘘を述べることはあります
+- **Quote the specification** — that is pdf-spec-mcp. Tables reference clause IDs and never copy the text
+- **Prove conformance** — only disprove it
+- **Issue verdicts** — that is `evaluate_policy`
+- **Replace veraPDF** — PDF/A verdicts are veraPDF's; only ISO 32000-1/-2 body clauses ship here
+- **Judge whether the content is true** — a file that satisfies every clause can still lie
 
-## 開発
+## Development
 
 ```sh
 npm install
 npm run build
 npm test
-npm run validate:tables   # 制約テーブル自身を tables/schema.json で検証
+npm run validate:tables   # validate the constraint tables against tables/schema.json
 ```
 
-テーブルを増やすときは `tables/*.json` を足して `validate:tables` を通します。
-述語（op）を増やす場合は `tables/schema.json` と `src/evaluate.ts` を対で更新してください —
-テーブルと評価意味論が同一バージョンで結束していることが、このパッケージの決定論の担保です。
+To add a table, drop a `tables/*.json` in and make `validate:tables` pass. To add a predicate (op),
+update `tables/schema.json` and `src/evaluate.ts` **together** — tables and evaluation semantics
+shipping in the same version is what makes the determinism worth anything.
 
-## ライセンス
+## License
 
 MIT © shuji-bonji

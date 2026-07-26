@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1] - 2026-07-26
+
+### Fixed
+
+- **`README.ja.md` was missing from the published package.** `files` did not list it, and npm
+  only auto-includes `README.md` — so the `[日本語](./README.ja.md)` link on the npm page led
+  nowhere. It is now packaged alongside the English README.
+
+### Documentation
+
+- **The README is now English, with the Japanese kept as `README.ja.md`.** The npm page and the
+  GitHub landing page are what a reader sees before anything else, and they were addressing only
+  part of the audience. Nothing about the package's behaviour changed.
+
 ## [0.1.0] - 2026-07-26
 
 ### Added
