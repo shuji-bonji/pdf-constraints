@@ -139,8 +139,12 @@ describe('制約の状態遷移', () => {
         },
       ],
     };
-    expect(evaluateConstraint(conditional, { 'doc.kind': 'B', 'doc.value': 2 }).status).toBe('pass');
-    expect(evaluateConstraint(conditional, { 'doc.kind': 'A', 'doc.value': 2 }).status).toBe('fail');
+    expect(evaluateConstraint(conditional, { 'doc.kind': 'B', 'doc.value': 2 }).status).toBe(
+      'pass',
+    );
+    expect(evaluateConstraint(conditional, { 'doc.kind': 'A', 'doc.value': 2 }).status).toBe(
+      'fail',
+    );
   });
 
   it('subjectNote を持つ制約の failure は traceOnly になる', () => {

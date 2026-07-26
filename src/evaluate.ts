@@ -29,8 +29,18 @@ export function parsePdfDate(value: unknown): number | null {
       value,
     );
   if (!m) return null;
-  const [, year, month = '01', day = '01', hour = '00', min = '00', sec = '00', sign, oh = '00', om = '00'] =
-    m;
+  const [
+    ,
+    year,
+    month = '01',
+    day = '01',
+    hour = '00',
+    min = '00',
+    sec = '00',
+    sign,
+    oh = '00',
+    om = '00',
+  ] = m;
   const mo = Number(month);
   const d = Number(day);
   const h = Number(hour);
@@ -38,9 +48,7 @@ export function parsePdfDate(value: unknown): number | null {
   const s = Number(sec);
   if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) return null;
   const offsetMinutes =
-    sign === '+' || sign === '-'
-      ? (Number(oh) * 60 + Number(om)) * (sign === '-' ? -1 : 1)
-      : 0; // R-7.9.4-17: UT 情報が無ければ GMT とみなす
+    sign === '+' || sign === '-' ? (Number(oh) * 60 + Number(om)) * (sign === '-' ? -1 : 1) : 0; // R-7.9.4-17: UT 情報が無ければ GMT とみなす
   return Date.UTC(Number(year), mo - 1, d, h, mi, s) - offsetMinutes * 60_000;
 }
 
@@ -122,9 +130,7 @@ export function evaluateConstraint(constraint: Constraint, facts: Facts): Constr
     .map((assertion) => checkAssertion(assertion, facts, constraint))
     .filter((f): f is Failure => f !== undefined);
 
-  return failures.length > 0
-    ? { ...base, status: 'fail', failures }
-    : { ...base, status: 'pass' };
+  return failures.length > 0 ? { ...base, status: 'fail', failures } : { ...base, status: 'pass' };
 }
 
 /**

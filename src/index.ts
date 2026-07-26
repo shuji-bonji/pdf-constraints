@@ -10,7 +10,7 @@
  * 適合の証明ではない。
  */
 
-export { checkBytes, checkFile, listTables, loadTable, type CheckOptions } from './check.js';
+export { type CheckOptions, checkBytes, checkFile, listTables, loadTable } from './check.js';
 export {
   evaluateConstraint,
   evaluateDocumentAsserts,

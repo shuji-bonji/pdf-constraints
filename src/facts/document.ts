@@ -65,7 +65,8 @@ export function extractDocumentFacts(doc: PDFDocument, given: Facts): Subject {
         ? decodePDFRawStream(metadata).decode()
         : metadata.contents;
       const text = new TextDecoder().decode(bytes);
-      facts['doc.xmp.hasXmpEnvelope'] = /<\?xpacket begin=/.test(text) && /<x:xmpmeta[\s>]/.test(text);
+      facts['doc.xmp.hasXmpEnvelope'] =
+        /<\?xpacket begin=/.test(text) && /<x:xmpmeta[\s>]/.test(text);
       facts['doc.xmp.CreateDate'] =
         /<xmp:CreateDate>([^<]+)<\/xmp:CreateDate>/.exec(text)?.[1] ?? null;
       facts['doc.xmp.ModifyDate'] =
