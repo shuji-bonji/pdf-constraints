@@ -1,0 +1,276 @@
+{
+  "$schema": "./schema.json",
+  "name": "font-embedding",
+  "version": "1",
+  "description": "条文 → 機械検査可能条件の写像 PoC。対象は writer B-14（W-2/W-3/W-4）で正解が既知のフォント埋め込み条文。判定の実行は pdf-verify の役割であり、このテーブルは『条文を満たすとは PDF 構造上どういう状態か』の宣言だけを持つ。",
+  "sourceSpec": {
+    "spec": "pdf20",
+    "retrievedWith": "pdf-spec-mcp get_requirements / get_tables",
+    "sections": [
+      "9.9.1",
+      "9.9.2",
+      "9.7.4.2"
+    ],
+    "specVersionAtMapping": "0.4.5"
+  },
+  "issue": "https://github.com/shuji-bonji/pdf-spec-mcp/issues/12",
+  "factVocabulary": {
+    "descriptor.fontFileKey": "FontDescriptor が持つ埋め込みキー（FontFile / FontFile2 / FontFile3 / none）",
+    "stream.dict.Subtype": "フォントストリーム辞書の /Subtype（name）",
+    "stream.dict.Length1": "フォントストリーム辞書の /Length1（integer | absent）",
+    "stream.decodedLength": "フィルタ復号後のフォントプログラムのバイト長",
+    "program.container": "復号後バイト列の種別: truetype(0x00010000|'true') / otto('OTTO') / bareCFF(0x01 0x00) / ttc('ttcf') / unknown",
+    "program.sfntTables": "sfnt テーブルディレクトリの tag 一覧（container が sfnt 系のとき）",
+    "program.isCffBased": "container == otto || bareCFF、または sfnt に 'CFF ' テーブルを含む",
+    "font.subtype": "参照元フォント辞書の /Subtype（Type1 / TrueType / Type0 / CIDFontType0 / CIDFontType2）",
+    "font.baseFont": "フォント辞書の /BaseFont（name, 先頭 '/' なし）",
+    "descriptor.fontName": "FontDescriptor の /FontName（name, 先頭 '/' なし）",
+    "given.isSubset": "【外部事実】このフォントがサブセットか。ファイル単体からは決定不能（PoC 発見事項 F-1）。producer 文脈またはサイドカーで供給する"
+  },
+  "constraints": [
+    {
+      "id": "CT-FONT-1",
+      "title": "FontFile2 の中身は TrueType フォントプログラムであること",
+      "clauses": [
+        "R-9.9.1-33",
+        "R-9.9.1-34"
+      ],
+      "source": {
+        "spec": "pdf20",
+        "section": "9.9.1",
+        "table": "Table 124",
+        "key": "FontFile2"
+      },
+      "level": "shall",
+      "appliesTo": "embedded-font",
+      "when": [
+        {
+          "fact": "descriptor.fontFileKey",
+          "op": "eq",
+          "value": "FontFile2"
+        }
+      ],
+      "assert": [
+        {
+          "fact": "program.container",
+          "op": "in",
+          "value": [
+            "truetype"
+          ],
+          "onFail": "FontFile2 に TrueType 以外のコンテナ（OTTO=CFF 等）が入っている（W-2 の実体）"
+        },
+        {
+          "fact": "program.sfntTables",
+          "op": "superset",
+          "value": [
+            "glyf",
+            "head",
+            "hhea",
+            "hmtx",
+            "loca",
+            "maxp"
+          ],
+          "onFail": "R-9.9.1-34 の必須 6 テーブルが欠けている"
+        }
+      ],
+      "notMapped": "R-9.9.1-35（cvt/fpgm/prep は『フォント命令が要求するなら』必須）は『要求するか』の判定に TrueType 命令の解釈が必要で、この語彙では書けない（人手判断 M-2）"
+    },
+    {
+      "id": "CT-FONT-2",
+      "title": "CIDFont の CFF 系プログラムは FontFile3（CIDFontType0C | OpenType）で埋め込むこと",
+      "clauses": [
+        "R-9.7.4.2-3"
+      ],
+      "source": {
+        "spec": "pdf20",
+        "section": "9.7.4.2"
+      },
+      "level": "shall",
+      "appliesTo": "embedded-font",
+      "when": [
+        {
+          "fact": "font.subtype",
+          "op": "in",
+          "value": [
+            "CIDFontType0",
+            "CIDFontType2"
+          ]
+        },
+        {
+          "fact": "program.isCffBased",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "assert": [
+        {
+          "fact": "descriptor.fontFileKey",
+          "op": "eq",
+          "value": "FontFile3",
+          "onFail": "CFF 系プログラムが FontFile3 以外のキーで埋め込まれている"
+        },
+        {
+          "fact": "stream.dict.Subtype",
+          "op": "in",
+          "value": [
+            "CIDFontType0C",
+            "OpenType"
+          ],
+          "onFail": "FontFile3 の Subtype が CIDFontType0C / OpenType のどちらでもない"
+        }
+      ]
+    },
+    {
+      "id": "CT-FONT-3",
+      "title": "サブセットフォントの名前は 6 大文字タグ + '+' で始まり、同一フォントの別サブセットは別タグであること",
+      "clauses": [
+        "R-9.9.2-2",
+        "R-9.9.2-3"
+      ],
+      "source": {
+        "spec": "pdf20",
+        "section": "9.9.2"
+      },
+      "level": "shall",
+      "appliesTo": "embedded-font",
+      "when": [
+        {
+          "fact": "given.isSubset",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "assert": [
+        {
+          "fact": "font.baseFont",
+          "op": "matches",
+          "value": "^[A-Z]{6}\\+.+",
+          "onFail": "BaseFont にサブセットタグが無い（W-3 の実体）"
+        },
+        {
+          "fact": "descriptor.fontName",
+          "op": "matches",
+          "value": "^[A-Z]{6}\\+.+",
+          "onFail": "FontDescriptor の FontName にサブセットタグが無い"
+        }
+      ],
+      "documentAssert": [
+        {
+          "fact": "doc.subsetTagsPerBaseName",
+          "op": "allDistinct",
+          "value": null,
+          "onFail": "同一フォントの別サブセットが同じタグを共有している（R-9.9.2-3 後段）"
+        }
+      ],
+      "notMapped": "applicability（サブセットか否か）はファイル内に無い事実で、条文が暗黙に producer 知識を前提にしている（PoC 発見事項 F-1）。R-9.9.2-4（.notdef の定義）は CFF charset / glyf の中身の解釈が必要（M-2 相当・今回は未写像）"
+    },
+    {
+      "id": "CT-FONT-4",
+      "title": "Type1 / TrueType プログラムのストリーム辞書には Length1 があり、復号後長と一致すること",
+      "clauses": [
+        "Table 125 Length1 (Required for Type 1 and TrueType font programs)"
+      ],
+      "source": {
+        "spec": "pdf20",
+        "section": "9.9.1",
+        "table": "Table 125",
+        "key": "Length1"
+      },
+      "level": "required",
+      "appliesTo": "embedded-font",
+      "when": [
+        {
+          "fact": "descriptor.fontFileKey",
+          "op": "in",
+          "value": [
+            "FontFile",
+            "FontFile2"
+          ]
+        }
+      ],
+      "assert": [
+        {
+          "fact": "stream.dict.Length1",
+          "op": "exists",
+          "value": true,
+          "onFail": "Length1 が無い（W-4 の実体）"
+        },
+        {
+          "fact": "stream.dict.Length1",
+          "op": "eqFact",
+          "value": "stream.decodedLength",
+          "onFail": "Length1 が復号後のプログラム長と一致しない",
+          "note": "TrueType では『the entire TrueType font program』。Type 1 は clear-text 部分長なのでこの等式は TrueType（FontFile2）のみ。FontFile（Type1）に適用するなら別述語が要る（M-3）",
+          "onlyWhen": [
+            {
+              "fact": "descriptor.fontFileKey",
+              "op": "eq",
+              "value": "FontFile2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CT-FONT-5",
+      "title": "CFF 表現（FontFile3）では Length1/2/3 を置かないこと・FontFile3/OpenType の CFF 系は cmap を含むこと",
+      "clauses": [
+        "R-9.9.1-12",
+        "R-9.9.1-42",
+        "R-9.9.1-47"
+      ],
+      "source": {
+        "spec": "pdf20",
+        "section": "9.9.1",
+        "table": "Table 124 / Table 125"
+      },
+      "level": "shall / shall not",
+      "appliesTo": "embedded-font",
+      "when": [
+        {
+          "fact": "descriptor.fontFileKey",
+          "op": "eq",
+          "value": "FontFile3"
+        }
+      ],
+      "assert": [
+        {
+          "fact": "stream.dict.Length1",
+          "op": "exists",
+          "value": false,
+          "onFail": "CFF 表現なのに Length1 がある（R-9.9.1-12 shall not）"
+        },
+        {
+          "fact": "stream.dict.Subtype",
+          "op": "in",
+          "value": [
+            "Type1C",
+            "CIDFontType0C",
+            "OpenType"
+          ],
+          "onFail": "FontFile3 の Subtype が Table 125 の許容値でない（R-9.9.1-47）"
+        },
+        {
+          "fact": "program.sfntTables",
+          "op": "superset",
+          "value": [
+            "cmap"
+          ],
+          "onFail": "OpenType(CFF) なのに cmap が無い（R-9.9.1-42）",
+          "onlyWhen": [
+            {
+              "fact": "stream.dict.Subtype",
+              "op": "eq",
+              "value": "OpenType"
+            },
+            {
+              "fact": "program.isCffBased",
+              "op": "eq",
+              "value": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

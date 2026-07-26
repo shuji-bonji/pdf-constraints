@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint & format check (biome)
+        run: npm run check
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Type check (incl. tests)
+        run: npm run typecheck:tests
+
+      # 制約テーブル（tables/*.json）自身を schema.json で検証する。
+      # データもコードと同じく検証対象にする — 合成表が実在しない行を持っていた
+      # pdf-spec S-4 の教訓（テーブルは「ただのデータ」ではなく規範の写像である）。
+      - name: Validate constraint tables
+        run: npm run validate:tables
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test

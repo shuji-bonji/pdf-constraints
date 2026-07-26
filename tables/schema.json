@@ -1,0 +1,158 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/shuji-bonji/pdf-constraints/tables/schema.json",
+  "title": "PDF constraint table",
+  "description": "条文（ISO 32000）→ 機械検査可能条件の写像。テーブルは判定の素であって条文原文でも verdict でもない（specs/18 §1）。",
+  "type": "object",
+  "required": ["name", "version", "description", "sourceSpec", "factVocabulary", "constraints"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "ドメイン名 = テーブル名。ファイル名と一致させる"
+    },
+    "version": { "type": "string", "description": "スキーマ世代（現在 \"1\"）" },
+    "description": { "type": "string", "minLength": 1 },
+    "issue": { "type": "string", "format": "uri" },
+    "sourceSpec": {
+      "type": "object",
+      "required": ["spec", "sections"],
+      "additionalProperties": false,
+      "description": "写像の出所。pdf-spec の版が上がったときに再照合できるようにする",
+      "properties": {
+        "spec": { "type": "string", "description": "pdf-spec-mcp の spec ID（例: pdf20）" },
+        "retrievedWith": { "type": "string" },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "specVersionAtMapping": {
+          "type": "string",
+          "description": "写像した時点の pdf-spec-mcp の版"
+        }
+      }
+    },
+    "factVocabulary": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "fact 名 → 意味。given.* は外部事実（ファイル単体から決定不能）",
+      "additionalProperties": { "type": "string" }
+    },
+    "newPredicates": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "このテーブルのために追加した述語の記録（語彙の伸びを測るため）"
+    },
+    "scopeFindings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "写像時に確認した射程の記録（過剰制約を防いだ判断など）"
+    },
+    "constraints": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/constraint" }
+    }
+  },
+  "definitions": {
+    "constraint": {
+      "type": "object",
+      "required": ["id", "title", "clauses", "source", "level", "appliesTo", "when", "assert"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^CT-[A-Z0-9]+-[0-9]+$",
+          "description": "一度公開した ID の意味は変えない（変えるなら新 ID）"
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "clauses": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "根拠条文の ID。原文は複製せず pdf-spec で引く"
+        },
+        "source": {
+          "type": "object",
+          "required": ["spec", "section"],
+          "properties": {
+            "spec": { "type": "string" },
+            "section": { "type": "string" },
+            "table": { "type": "string" },
+            "key": { "type": "string" }
+          }
+        },
+        "level": { "type": "string", "description": "shall / should / required など条文の要求水準" },
+        "appliesTo": {
+          "type": "string",
+          "enum": ["embedded-font", "document"],
+          "description": "評価スコープ。将来 annotation / page を追加する"
+        },
+        "subjectNote": {
+          "type": "string",
+          "description": "条文の主語が processor（書き込み行為）のとき、ファイルから観測できるのは『違反の痕跡』までであることの記録（specs/18 §1 / F-5）"
+        },
+        "notMapped": {
+          "type": "string",
+          "description": "語彙で写像できなかった条文と、その理由。沈黙して存在しないふりをしない"
+        },
+        "when": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/predicate" },
+          "description": "適用条件。given.* が未供給なら needs_external_fact に縮退する"
+        },
+        "assert": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/assertion" }
+        },
+        "documentAssert": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/assertion" },
+          "description": "文書横断の検査（同一フォントのタグ重複など）"
+        }
+      }
+    },
+    "predicate": {
+      "type": "object",
+      "required": ["fact", "op"],
+      "additionalProperties": false,
+      "properties": {
+        "fact": { "type": "string" },
+        "op": {
+          "type": "string",
+          "enum": ["eq", "in", "exists", "matches", "superset", "eqFact", "allDistinct", "dateEquiv"],
+          "description": "v1 の凍結セット。追加は minor バンプ（評価器と同梱なので版で結束する）"
+        },
+        "value": {}
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "required": ["fact", "op", "onFail"],
+      "additionalProperties": false,
+      "properties": {
+        "fact": { "type": "string" },
+        "op": {
+          "type": "string",
+          "enum": ["eq", "in", "exists", "matches", "superset", "eqFact", "allDistinct", "dateEquiv"]
+        },
+        "value": {},
+        "onFail": {
+          "type": "string",
+          "minLength": 1,
+          "description": "違反時の説明。subjectNote を持つ制約では『違反の痕跡』と述べる"
+        },
+        "note": { "type": "string" },
+        "onlyWhen": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/predicate" },
+          "description": "この assert だけに掛かる追加条件（満たさなければ検査自体を飛ばす）"
+        }
+      }
+    }
+  }
+}

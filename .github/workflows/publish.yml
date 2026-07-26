@@ -1,0 +1,96 @@
+name: Publish to npm
+
+# Trusted Publisher (OIDC) ベースで npm へ publish する。
+# 事前に npmjs.com 側でこのリポジトリ（shuji-bonji/pdf-constraints）と
+# workflow ファイル名 (publish.yml) を Trusted Publisher として登録しておくこと。
+# → https://docs.npmjs.com/trusted-publishers
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write # OIDC で npm に対し署名済み provenance を発行するために必須
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint & type check
+        run: |
+          npm run check
+          npm run typecheck
+          npm run typecheck:tests
+
+      - name: Validate constraint tables
+        run: npm run validate:tables
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # package.json の version と push された tag (v*) が一致するかを検証。
+      # tag だけ先行で打って package.json を上げ忘れる事故を防ぐ。
+      - name: Verify version matches tag
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: package.json version ($PACKAGE_VERSION) does not match tag version ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "Version verified: $PACKAGE_VERSION"
+
+      # 空 bump（内容の変更が無い版上げ）と CHANGELOG の書き忘れを防ぐ（規約 §2.8）。
+      # v0.3.2 は「publish 済みバージョンとの整合を取るための版上げ」で、パッケージ内容に
+      # 変更が無かった。同じことを繰り返さないための機械的な歯止め。
+      #
+      # 3 つを見る:
+      #   1. このバージョンの節があるか（タグだけ先行する事故）
+      #   2. その節に中身があるか（← 空 bump の本体。見出しだけ足せば通る検査では意味がない）
+      #   3. [Unreleased] が空か（書いたつもりが移し忘れ、無記載のまま出る事故）
+      - name: Verify CHANGELOG documents this release
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          if ! grep -qE "^## \[$VERSION\]" CHANGELOG.md; then
+            echo "Error: CHANGELOG.md has no '## [$VERSION]' section."
+            exit 1
+          fi
+          BODY=$(sed -n "/^## \[$VERSION\]/,/^## \[/{/^## \[/!p}" CHANGELOG.md | grep -v '^\s*$' || true)
+          if [ -z "$BODY" ]; then
+            echo "Error: the '## [$VERSION]' section is empty."
+            echo "A release has to say what changed. If nothing changed, do not release."
+            exit 1
+          fi
+          UNRELEASED=$(sed -n "/^## \[Unreleased\]/,/^## \[/{/^## \[/!p}" CHANGELOG.md | grep -v '^\s*$' || true)
+          if [ -n "$UNRELEASED" ]; then
+            echo "Error: CHANGELOG.md still has content under [Unreleased]."
+            echo "Move it under '## [$VERSION]' before tagging, or it ships undocumented."
+            exit 1
+          fi
+          echo "CHANGELOG verified for $VERSION"
+
+      # Trusted Publisher + provenance つき publish。
+      # Node 同梱の npm 10.x は OIDC 連携が不完全で 404 になるため、
+      # npx で最新の npm（11.x 以降）を明示的に使う。
+      # id-token: write 権限があり、かつ npmjs.com 側で Trusted Publisher が
+      # 設定されていれば NPM_TOKEN は不要。
+      - name: Publish to npm
+        run: npx npm@latest publish --provenance --access public

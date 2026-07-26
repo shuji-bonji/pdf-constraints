@@ -1,0 +1,253 @@
+{
+  "$schema": "./schema.json",
+  "name": "document-metadata",
+  "version": "1",
+  "description": "第 2 ドメイン: 文書メタデータ（ISO 32000-2 §14.3 + §7.9.4）。語彙収束の計測が目的。フォントと違い appliesTo が document スコープで、条文の主語が processor（書き込み行為）のものを含む — ファイル状態から観測できるのは『違反の痕跡』まで（subjectNote 参照）。",
+  "sourceSpec": {
+    "spec": "pdf20",
+    "retrievedWith": "pdf-spec-mcp get_requirements / get_tables",
+    "sections": [
+      "14.3.2",
+      "14.3.3",
+      "14.3.4",
+      "7.9.4"
+    ],
+    "specVersionAtMapping": "0.4.5"
+  },
+  "issue": "https://github.com/shuji-bonji/pdf-spec-mcp/issues/12",
+  "factVocabulary": {
+    "doc.xmp.exists": "catalog /Metadata がストリームとして存在するか",
+    "doc.xmp.dict.Type": "メタデータストリーム辞書の /Type（name）",
+    "doc.xmp.dict.Subtype": "同 /Subtype（name）",
+    "doc.xmp.hasXmpEnvelope": "復号後テキストが xpacket + x:xmpmeta の外形を持つか（ISO 16684-1 の完全文法検査ではない）",
+    "doc.xmp.CreateDate": "xmp:CreateDate の文字列（ISO 8601）| absent",
+    "doc.xmp.ModifyDate": "xmp:ModifyDate の文字列（ISO 8601）| absent",
+    "doc.info.CreationDate": "Info /CreationDate の生文字列 | absent",
+    "doc.info.ModDate": "Info /ModDate の生文字列 | absent",
+    "doc.info.TrappedKind": "Info /Trapped の種別: name:True / name:False / name:Unknown / boolean / other / absent"
+  },
+  "newPredicates": [
+    "dateEquiv（PDF 日付文字列 ↔ ISO 8601 を同一時点として比較。§7.9.4 の既定値規則で正規化）"
+  ],
+  "constraints": [
+    {
+      "id": "CT-META-1",
+      "title": "メタデータストリーム辞書は /Type /Metadata・/Subtype /XML を持つこと",
+      "clauses": [
+        "R-14.3.2-6",
+        "R-14.3.2-7"
+      ],
+      "source": {
+        "spec": "pdf20",
+        "section": "14.3.2",
+        "table": "Table 347"
+      },
+      "level": "shall",
+      "appliesTo": "document",
+      "when": [
+        {
+          "fact": "doc.xmp.exists",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "assert": [
+        {
+          "fact": "doc.xmp.dict.Type",
+          "op": "eq",
+          "value": "Metadata",
+          "onFail": "メタデータストリームの /Type が Metadata でない"
+        },
+        {
+          "fact": "doc.xmp.dict.Subtype",
+          "op": "eq",
+          "value": "XML",
+          "onFail": "メタデータストリームの /Subtype が XML でない"
+        }
+      ]
+    },
+    {
+      "id": "CT-META-2",
+      "title": "メタデータストリームの中身は XMP（XML）であること",
+      "clauses": [
+        "R-14.3.2-2"
+      ],
+      "source": {
+        "spec": "pdf20",
+        "section": "14.3.2"
+      },
+      "level": "shall",
+      "appliesTo": "document",
+      "when": [
+        {
+          "fact": "doc.xmp.exists",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "assert": [
+        {
+          "fact": "doc.xmp.hasXmpEnvelope",
+          "op": "eq",
+          "value": true,
+          "onFail": "メタデータストリームが XMP パケットの外形を持たない"
+        }
+      ],
+      "notMapped": "条文は『文法は ISO 16684-1 に従う shall』まで要求するが、ISO 16684-1 は corpus 外（T2 と同型の境界）。この写像は xpacket/x:xmpmeta の外形検査で近似している"
+    },
+    {
+      "id": "CT-META-3",
+      "title": "Info の日付値は §7.9.4 の日付文字列文法に従うこと",
+      "clauses": [
+        "R-7.9.4-2",
+        "R-7.9.4-12",
+        "R-7.9.4-14",
+        "R-7.9.4-15"
+      ],
+      "source": {
+        "spec": "pdf20",
+        "section": "7.9.4"
+      },
+      "level": "shall",
+      "appliesTo": "document",
+      "when": [],
+      "assert": [
+        {
+          "fact": "doc.info.CreationDate",
+          "op": "matches",
+          "value": "^D:\\d{4}(\\d{2}(\\d{2}(\\d{2}(\\d{2}(\\d{2}([Z+\\-](\\d{2}('(\\d{2})?'?)?)?)?)?)?)?)?)?$",
+          "onFail": "Info /CreationDate が日付文字列文法に合わない",
+          "onlyWhen": [
+            {
+              "fact": "doc.info.CreationDate",
+              "op": "exists",
+              "value": true
+            }
+          ]
+        },
+        {
+          "fact": "doc.info.ModDate",
+          "op": "matches",
+          "value": "^D:\\d{4}(\\d{2}(\\d{2}(\\d{2}(\\d{2}(\\d{2}([Z+\\-](\\d{2}('(\\d{2})?'?)?)?)?)?)?)?)?)?$",
+          "onFail": "Info /ModDate が日付文字列文法に合わない",
+          "onlyWhen": [
+            {
+              "fact": "doc.info.ModDate",
+              "op": "exists",
+              "value": true
+            }
+          ]
+        }
+      ],
+      "notMapped": "フィールド値域（MM 01–12 等 = R-7.9.4-4〜-8）は正規表現では桁しか見ていない。dateEquiv 側の正規化で不正値は NaN に落ちるため実質は拾えるが、単独の値域述語としては未写像"
+    },
+    {
+      "id": "CT-META-4",
+      "title": "作成日時は Info と XMP の両方に書くなら完全等価であること",
+      "clauses": [
+        "R-14.3.4-2",
+        "R-14.3.4-4"
+      ],
+      "source": {
+        "spec": "pdf20",
+        "section": "14.3.4"
+      },
+      "level": "shall / may(条件付き)",
+      "appliesTo": "document",
+      "subjectNote": "条文の主語は PDF processor（書き込み行為）。ファイル状態から観測できるのは『どこかの writer が等価性を破った痕跡』であり、どの writer かは特定できない。R-14.3.4-3（既存の不整合は触らず残す should）により、不整合の存在自体が直近の writer の違反とは限らない",
+      "when": [
+        {
+          "fact": "doc.info.CreationDate",
+          "op": "exists",
+          "value": true
+        },
+        {
+          "fact": "doc.xmp.CreateDate",
+          "op": "exists",
+          "value": true
+        }
+      ],
+      "assert": [
+        {
+          "fact": "doc.info.CreationDate",
+          "op": "dateEquiv",
+          "value": "doc.xmp.CreateDate",
+          "onFail": "Info /CreationDate と xmp:CreateDate が等価でない（writer の R-14.3.4-2/-4 違反の痕跡）"
+        }
+      ]
+    },
+    {
+      "id": "CT-META-5",
+      "title": "更新日時は Info と XMP の両方に書くなら完全等価であること",
+      "clauses": [
+        "R-14.3.4-5"
+      ],
+      "source": {
+        "spec": "pdf20",
+        "section": "14.3.4"
+      },
+      "level": "shall",
+      "appliesTo": "document",
+      "subjectNote": "CT-META-4 と同じく主語は processor。ファイルからは痕跡のみ",
+      "when": [
+        {
+          "fact": "doc.info.ModDate",
+          "op": "exists",
+          "value": true
+        },
+        {
+          "fact": "doc.xmp.ModifyDate",
+          "op": "exists",
+          "value": true
+        }
+      ],
+      "assert": [
+        {
+          "fact": "doc.info.ModDate",
+          "op": "dateEquiv",
+          "value": "doc.xmp.ModifyDate",
+          "onFail": "Info /ModDate と xmp:ModifyDate が等価でない（writer の R-14.3.4-5 違反の痕跡）"
+        }
+      ]
+    },
+    {
+      "id": "CT-META-6",
+      "title": "Trapped は boolean でなく name（True/False/Unknown）であること",
+      "clauses": [
+        "R-14.3.3-5",
+        "R-14.3.3-6"
+      ],
+      "source": {
+        "spec": "pdf20",
+        "section": "14.3.3",
+        "table": "Table 349",
+        "key": "Trapped"
+      },
+      "level": "shall",
+      "appliesTo": "document",
+      "when": [
+        {
+          "fact": "doc.info.TrappedKind",
+          "op": "exists",
+          "value": true
+        }
+      ],
+      "assert": [
+        {
+          "fact": "doc.info.TrappedKind",
+          "op": "in",
+          "value": [
+            "name:True",
+            "name:False",
+            "name:Unknown"
+          ],
+          "onFail": "Trapped が name True/False/Unknown でない（boolean は R-14.3.3-5/-6 違反）"
+        }
+      ],
+      "notMapped": "Table 349 で Trapped は PDF 2.0 deprecated。『deprecated を新規に書くべきでない』は要件レベルの写像対象外（should 相当の運用判断）"
+    }
+  ],
+  "scopeFindings": [
+    "Info /Title ↔ dc:title の等価は R-14.3.4 の shall の射程外（shall は time and date のみ）。B-9 の同期は良い実装だが条文義務ではない — 写像時に射程を条文で確認しないと過剰制約になる（フォント PoC の M-1 の再演）"
+  ]
+}
