@@ -68,6 +68,7 @@ import table from '@shuji-bonji/pdf-constraints/tables/font-embedding.json' with
 |---|---|---|
 | `font-embedding` | §9.9.1 / §9.9.2 / §9.7.4.2（Table 124 / 125 含む） | CT-FONT-1〜5 — 埋め込みキーと中身の一致、サブセット名タグ、`Length1` |
 | `document-metadata` | §14.3.2 / §14.3.3 / §14.3.4 / §7.9.4 | CT-META-1〜6 — メタデータストリームの型、日付書式、Info↔XMP の等価、`Trapped` |
+| `annotation` | §12.5.2 / §12.5.3 / §12.5.5 / §12.5.6.2 / §12.5.6.10（Table 166 / 167 / 172 / 182 含む） | CT-ANNOT-1〜15 — writer が負う外観辞書 `/AP`、`/Contents` の段落区切り、色とフラグの構文、`/QuadPoints` の頂点順序、`Popup` / `IRT` の関係、参照は 1 ページからのみ |
 
 ## 4 つの状態
 

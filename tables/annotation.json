@@ -1,0 +1,354 @@
+{
+  "$schema": "./schema.json",
+  "name": "annotation",
+  "version": "1",
+  "description": "ISO 32000-2 §12.5（注釈）→ 機械検査可能条件の写像。第 3 ドメイン。判定の実行は pdf-verify の役割であり、このテーブルは『条文を満たすとは PDF 構造上どういう状態か』の宣言だけを持つ。veraPDF が見ない本体条文を対象にしている点は第 1 ドメインと同じで、AP の義務（R-12.5.2-11/-12）は ISO 32000-1 では Optional だったため PDF/UA-1 検証では検出されない。",
+  "sourceSpec": {
+    "spec": "pdf20",
+    "retrievedWith": "pdf-spec-mcp get_requirements / get_tables / get_section",
+    "sections": ["12.5.2", "12.5.3", "12.5.5", "12.5.6.2", "12.5.6.10"],
+    "specVersionAtMapping": "0.4.5"
+  },
+  "issue": "https://github.com/shuji-bonji/pdf-spec-mcp/issues/12",
+  "newPredicates": [],
+  "scopeFindings": [
+    "述語は 1 つも増やさなかった（3 ドメイン目で凍結セット 8 個のまま）。代わりに判定が fact 抽出器へ移っている（winding / hasLoneLf / isDegenerate 等）。テーブルだけを読んでも『どう判定しているか』は分からないので、factVocabulary に判定規則そのものを書いてある",
+    "表の『(Required)』行には正典で requirement ID が振られない（shall ではないため）。ID を捏造せず、clauses に `Table 166:Subtype` の形式でテーブル行を参照する規約を本ドメインで導入した。source.table / source.key にも同じ情報を持たせてあるので、pdf-spec の版が上がったときの再照合は可能",
+    "R-12.5.2-9（注釈の /M の日付形式）は写像しなかった。条文は『should be a date string』であり、shall は処理系側（any format を受理せよ）に掛かっている。ここを shall として書くと過剰制約になる（第 2 ドメインで Info /Title ↔ dc:title を入れなかった判断の再演）",
+    "ページ単位の事実（/NM の重複・/IRT の同一ページ・複数ページからの参照）は page scope を作らず、抽出時に計算して annotation subject の fact として持たせた。scope を増やす判断は『ページ単位でしか書けない制約』が実際に出てからにする"
+  ],
+  "factVocabulary": {
+    "annot.subtype": "/Subtype の名前（先頭 '/' なし）| null",
+    "annot.hasSubtype": "/Subtype が名前として存在するか",
+    "annot.hasType": "/Type キーが存在するか",
+    "annot.typeValue": "/Type の名前 | null",
+    "annot.hasRect": "/Rect が 4 要素の数値配列として読めたか",
+    "annot.rect.isDegenerate": "Rect=[x1 y1 x2 y2] で x1==x2 かつ y1==y2（Table 166 AP 例外①。2020 年に『or』から『and』へ改められた側の読み）| null=Rect が読めない",
+    "annot.hasAP": "/AP が辞書として存在するか",
+    "annot.ap.hasSubdictionary": "/AP の値（N / R / D）のいずれかが外観ストリームではなく『状態名 → ストリーム』の辞書か | null=AP なし",
+    "annot.hasAS": "/AS キーが存在するか",
+    "annot.isApExemptSubtype": "/Subtype が Popup / Projection / Link のいずれか（Table 166 AP 例外②）",
+    "annot.isMarkup": "markup 注釈か（§12.5.6.2 本文の列挙: Text/FreeText/Line/Square/Circle/Polygon/PolyLine/Highlight/Underline/Squiggly/StrikeOut/Stamp/Caret/Ink/FileAttachment/Sound/Projection）",
+    "annot.isTextMarkup": "text markup 注釈か（Table 182: Highlight/Underline/Squiggly/StrikeOut）",
+    "annot.hasContents": "/Contents がテキスト文字列として読めたか",
+    "annot.contents.hasLoneLf": "/Contents に CR を伴わない単独の LF (0Ah) が含まれるか（CRLF の LF は改行の一部として数えない）| null=Contents なし",
+    "annot.C.length": "/C の要素数（数値配列として読めたときのみ）| null",
+    "annot.C.allInUnitRange": "/C の全要素が 0.0〜1.0 か | null=C なし",
+    "annot.hasBM": "/BM キーが存在するか",
+    "annot.BM.isStandard": "/BM が Table 134 / 135 の標準ブレンドモード名か | null=BM なし",
+    "annot.hasFlags": "/F が整数として存在するか",
+    "annot.flags.hasUndefinedBits": "/F に Table 167 のビット 1〜10 以外が立っているか（マスク 0x3FF の外）| null=F なし",
+    "annot.hasQuadPoints": "/QuadPoints が数値配列として読めたか",
+    "annot.quadPoints.isMultipleOf8": "/QuadPoints の要素数が 8 の倍数かつ 0 でないか | null=QuadPoints なし",
+    "annot.quadPoints.winding": "四辺形の向き。ccw / cw = 単純多角形で靴紐公式の符号付き面積が正 / 負。nonSimple = 面積 0 または対辺が交差（左上→右上→左下→右下 の Z 順はここに落ちる）。mixed = 四辺形ごとに向きが異なる | null=読めない or 8 の倍数でない",
+    "annot.popup.isReferenced": "この注釈が同一ページのどれかの注釈の /Popup から参照されているか | null=間接参照でない",
+    "annot.hasRT": "/RT キーが存在するか",
+    "annot.hasIRT": "/IRT キーが存在するか",
+    "annot.irt.samePage": "/IRT の参照先が同じページの /Annots に含まれるか | null=IRT が間接参照でない（FDF ではテキスト文字列になる）",
+    "annot.hasNM": "/NM がテキスト文字列として読めたか",
+    "annot.nm.duplicatedOnPage": "同じ /NM 値を持つ注釈が同一ページに 2 つ以上あるか | null=NM なし",
+    "annot.hasP": "/P キーが存在するか",
+    "annot.isScreenWithRendition": "/Subtype が Screen で、かつ /A の /S が Rendition か",
+    "annot.referencedByPageCount": "この注釈辞書を /Annots に持つページの数（直接オブジェクトのときは 1）"
+  },
+  "constraints": [
+    {
+      "id": "CT-ANNOT-1",
+      "title": "注釈辞書は /Subtype と /Rect を持つこと",
+      "clauses": ["Table 166:Subtype", "Table 166:Rect"],
+      "source": { "spec": "pdf20", "section": "12.5.2", "table": "Table 166" },
+      "level": "required",
+      "appliesTo": "annotation",
+      "when": [],
+      "assert": [
+        {
+          "fact": "annot.hasSubtype",
+          "op": "eq",
+          "value": true,
+          "onFail": "/Subtype が無い（Table 166 で Required）。注釈の種類が決まらない"
+        },
+        {
+          "fact": "annot.hasRect",
+          "op": "eq",
+          "value": true,
+          "onFail": "/Rect が無い、または 4 要素の数値配列として読めない（Table 166 で Required）"
+        }
+      ],
+      "notMapped": "『(Required)』の表行には正典で requirement ID が振られないため、clauses はテーブル行参照で書いている（scopeFindings 参照）"
+    },
+    {
+      "id": "CT-ANNOT-2",
+      "title": "/Type を書くなら値は Annot であること",
+      "clauses": ["R-12.5.2-5"],
+      "source": { "spec": "pdf20", "section": "12.5.2", "table": "Table 166", "key": "Type" },
+      "level": "shall",
+      "appliesTo": "annotation",
+      "when": [{ "fact": "annot.hasType", "op": "eq", "value": true }],
+      "assert": [
+        {
+          "fact": "annot.typeValue",
+          "op": "eq",
+          "value": "Annot",
+          "onFail": "/Type があるのに値が Annot でない（省略は許されるが、書くなら Annot）"
+        }
+      ]
+    },
+    {
+      "id": "CT-ANNOT-3",
+      "title": "注釈は外観辞書 /AP を持つこと（例外は退化 Rect と Popup / Projection / Link のみ）",
+      "clauses": ["R-12.5.2-11", "R-12.5.2-12"],
+      "source": { "spec": "pdf20", "section": "12.5.2", "table": "Table 166", "key": "AP" },
+      "level": "shall",
+      "appliesTo": "annotation",
+      "when": [
+        { "fact": "annot.isApExemptSubtype", "op": "eq", "value": false },
+        { "fact": "annot.rect.isDegenerate", "op": "eq", "value": false }
+      ],
+      "assert": [
+        {
+          "fact": "annot.hasAP",
+          "op": "eq",
+          "value": true,
+          "onFail": "外観辞書 /AP が無い。ISO 32000-2 は writer に対して『書き込み・更新時に外観辞書を含めなければならない』と要求しており、例外は退化 Rect と Popup / Projection / Link だけ",
+          "note": "ISO 32000-1 では AP は Optional だったため、32000-1 を基準にする PDF/UA-1 検証（veraPDF）では検出されない。writer v0.9.1 以前の add_annotation がこの状態だった（v0.9.2 で是正）"
+        }
+      ],
+      "notMapped": "R-12.5.5-22 / -23（未対応の注釈型は N 外観で描画する・AS が指す外観が無いときの振る舞い）は主語が PDF processor なのでファイルからは観測できない"
+    },
+    {
+      "id": "CT-ANNOT-4",
+      "title": "/AP が外観サブ辞書を持つなら /AS があること",
+      "clauses": ["Table 166:AS"],
+      "source": { "spec": "pdf20", "section": "12.5.2", "table": "Table 166", "key": "AS" },
+      "level": "required",
+      "appliesTo": "annotation",
+      "when": [{ "fact": "annot.ap.hasSubdictionary", "op": "eq", "value": true }],
+      "assert": [
+        {
+          "fact": "annot.hasAS",
+          "op": "eq",
+          "value": true,
+          "onFail": "/AP に外観サブ辞書があるのに /AS が無い。どの外観状態を使うか決まらない"
+        }
+      ]
+    },
+    {
+      "id": "CT-ANNOT-5",
+      "title": "markup 注釈の /Contents は段落区切りに CR を使うこと",
+      "clauses": ["R-12.5.6.2-7"],
+      "source": { "spec": "pdf20", "section": "12.5.6.2" },
+      "level": "shall",
+      "appliesTo": "annotation",
+      "when": [
+        { "fact": "annot.isMarkup", "op": "eq", "value": true },
+        { "fact": "annot.hasContents", "op": "eq", "value": true }
+      ],
+      "assert": [
+        {
+          "fact": "annot.contents.hasLoneLf",
+          "op": "eq",
+          "value": false,
+          "onFail": "/Contents に CR を伴わない単独の LF (0Ah) がある。条文は段落区切りに CARRIAGE RETURN (0Dh) を使い、LINE FEED を使わないことを要求している",
+          "note": "JSON API 越しに書くと利用者が入力するのは \\n なので、writer 側で正規化しない限りそのまま 000A で書かれる。writer v0.9.1 以前がこの状態だった（v0.9.2 で normalizeAnnotationText により是正）"
+        }
+      ]
+    },
+    {
+      "id": "CT-ANNOT-6",
+      "title": "/C の要素数は色空間を決める 0 / 1 / 3 / 4 のいずれかで、値は 0.0〜1.0 であること",
+      "clauses": ["R-12.5.2-19"],
+      "source": { "spec": "pdf20", "section": "12.5.2", "table": "Table 166", "key": "C" },
+      "level": "shall",
+      "appliesTo": "annotation",
+      "when": [{ "fact": "annot.C.length", "op": "exists", "value": true }],
+      "assert": [
+        {
+          "fact": "annot.C.length",
+          "op": "in",
+          "value": [0, 1, 3, 4],
+          "onFail": "/C の要素数が 0（透明）/ 1（DeviceGray）/ 3（DeviceRGB）/ 4（DeviceCMYK）のいずれでもない。色空間が決まらない"
+        },
+        {
+          "fact": "annot.C.allInUnitRange",
+          "op": "eq",
+          "value": true,
+          "onFail": "/C に 0.0〜1.0 の範囲外の数値がある"
+        }
+      ]
+    },
+    {
+      "id": "CT-ANNOT-7",
+      "title": "/BM は標準ブレンドモード名であること",
+      "clauses": ["R-12.5.2-33"],
+      "source": { "spec": "pdf20", "section": "12.5.2", "table": "Table 166", "key": "BM" },
+      "level": "shall",
+      "appliesTo": "annotation",
+      "when": [{ "fact": "annot.hasBM", "op": "eq", "value": true }],
+      "assert": [
+        {
+          "fact": "annot.BM.isStandard",
+          "op": "eq",
+          "value": true,
+          "onFail": "/BM が Table 134（分離可能）/ Table 135（分離不能）の標準ブレンドモード名でない"
+        }
+      ],
+      "notMapped": "R-12.5.2-24 / -29（/AP があるときは ca / CA の値を使わない）と R-12.5.2-32（/BM が無ければ Normal）は主語が処理系であり、ファイル側に違反の痕跡が残らない"
+    },
+    {
+      "id": "CT-ANNOT-8",
+      "title": "/F の未定義ビットは 0 であること",
+      "clauses": ["R-12.5.3-2"],
+      "source": { "spec": "pdf20", "section": "12.5.3", "table": "Table 167" },
+      "level": "shall",
+      "appliesTo": "annotation",
+      "when": [{ "fact": "annot.hasFlags", "op": "eq", "value": true }],
+      "assert": [
+        {
+          "fact": "annot.flags.hasUndefinedBits",
+          "op": "eq",
+          "value": false,
+          "onFail": "/F に Table 167 が定義しないビット（11 以上）が立っている。条文は『all other bits shall be set to 0』を要求している"
+        }
+      ]
+    },
+    {
+      "id": "CT-ANNOT-9",
+      "title": "text markup の /QuadPoints は 8 の倍数個で、各四辺形は反時計回りであること",
+      "clauses": ["R-12.5.6.10-5", "Table 182:QuadPoints"],
+      "source": {
+        "spec": "pdf20",
+        "section": "12.5.6.10",
+        "table": "Table 182",
+        "key": "QuadPoints"
+      },
+      "level": "shall",
+      "appliesTo": "annotation",
+      "when": [
+        { "fact": "annot.isTextMarkup", "op": "eq", "value": true },
+        { "fact": "annot.hasQuadPoints", "op": "eq", "value": true }
+      ],
+      "assert": [
+        {
+          "fact": "annot.quadPoints.isMultipleOf8",
+          "op": "eq",
+          "value": true,
+          "onFail": "/QuadPoints の要素数が 8 の倍数でない（1 四辺形 = 8 数値）"
+        },
+        {
+          "fact": "annot.quadPoints.winding",
+          "op": "eq",
+          "value": "ccw",
+          "onFail": "四辺形の頂点順序が反時計回りでない。条文は counterclockwise を shall で要求している",
+          "note": "業界の実装は Z 順（左上→右上→左下→右下）が事実上の標準で、その順序は単純多角形にすらならない（対辺が交差し符号付き面積が 0 = winding は nonSimple）。条文どおりに書くと主要ビューアで表示が壊れるため、意図的に逸脱している実装が多い。この fail は『相互運用のために条文から逸脱している』ことの表示であって、ただちに是正すべき欠陥を意味しない。是正するかは利用者の判断",
+          "onlyWhen": [{ "fact": "annot.quadPoints.isMultipleOf8", "op": "eq", "value": true }]
+        }
+      ],
+      "notMapped": "R-12.5.6.10-4（各四辺形は語または連続語群を囲む）は本文テキストとの対応が要る＝ファイル外の事実。reader の extract_structured_text（include_bbox）があれば測れるが、fact 抽出器が reader に依存するので v1 では入れない。Figure 84 は画像であり正典コーパスから読めないため、根拠は本文の『counterclockwise』のみ"
+    },
+    {
+      "id": "CT-ANNOT-10",
+      "title": "Popup 注釈は単独で存在しないこと",
+      "clauses": ["R-12.5.6.2-9"],
+      "source": { "spec": "pdf20", "section": "12.5.6.2" },
+      "level": "shall",
+      "appliesTo": "annotation",
+      "when": [{ "fact": "annot.subtype", "op": "eq", "value": "Popup" }],
+      "assert": [
+        {
+          "fact": "annot.popup.isReferenced",
+          "op": "eq",
+          "value": true,
+          "onFail": "Popup 注釈がどの markup 注釈の /Popup からも参照されていない。条文は『単独で現れてはならず、テキスト表示に使う markup 注釈と関連付けられなければならない』と要求している"
+        }
+      ]
+    },
+    {
+      "id": "CT-ANNOT-11",
+      "title": "/RT を書くなら /IRT があること",
+      "clauses": ["Table 172:IRT"],
+      "source": { "spec": "pdf20", "section": "12.5.6.2", "table": "Table 172", "key": "IRT" },
+      "level": "required",
+      "appliesTo": "annotation",
+      "when": [{ "fact": "annot.hasRT", "op": "eq", "value": true }],
+      "assert": [
+        {
+          "fact": "annot.hasIRT",
+          "op": "eq",
+          "value": true,
+          "onFail": "/RT があるのに /IRT が無い（Table 172: Required if an RT entry is present）。返信先が決まらない"
+        }
+      ]
+    },
+    {
+      "id": "CT-ANNOT-12",
+      "title": "/IRT の相手は同じページにあること",
+      "clauses": ["R-12.5.6.2-20"],
+      "source": { "spec": "pdf20", "section": "12.5.6.2", "table": "Table 172", "key": "IRT" },
+      "level": "shall",
+      "appliesTo": "annotation",
+      "when": [{ "fact": "annot.irt.samePage", "op": "exists", "value": true }],
+      "assert": [
+        {
+          "fact": "annot.irt.samePage",
+          "op": "eq",
+          "value": true,
+          "onFail": "/IRT の参照先が同じページの /Annots に無い。条文は『Both annotations shall be on the same page』を要求している"
+        }
+      ],
+      "notMapped": "FDF では /IRT がテキスト文字列（相手の /NM）になる。その形は本テーブルの対象外なので、間接参照でないときは when が成立せず not_applicable になる"
+    },
+    {
+      "id": "CT-ANNOT-13",
+      "title": "同じ注釈辞書が複数ページから参照されていないこと",
+      "clauses": ["R-12.5.2-2"],
+      "source": { "spec": "pdf20", "section": "12.5.2" },
+      "level": "shall",
+      "appliesTo": "annotation",
+      "when": [],
+      "assert": [
+        {
+          "fact": "annot.referencedByPageCount",
+          "op": "eq",
+          "value": 1,
+          "onFail": "同じ注釈辞書が 2 つ以上のページの /Annots から参照されている。条文は『a given annotation dictionary shall be referenced from the Annots array of only one page』を要求している",
+          "note": "ページ複製・結合のときに起きやすい。writer のページ操作系（extract / merge）が構造を引き継ぐ経路の回帰検査に使える"
+        }
+      ]
+    },
+    {
+      "id": "CT-ANNOT-14",
+      "title": "/NM はページ内で一意であること",
+      "clauses": ["Table 166:NM"],
+      "source": { "spec": "pdf20", "section": "12.5.2", "table": "Table 166", "key": "NM" },
+      "level": "required",
+      "appliesTo": "annotation",
+      "when": [{ "fact": "annot.hasNM", "op": "eq", "value": true }],
+      "assert": [
+        {
+          "fact": "annot.nm.duplicatedOnPage",
+          "op": "eq",
+          "value": false,
+          "onFail": "同じ /NM を持つ注釈が同一ページに複数ある。/NM は『そのページの全注釈の中で一意に識別する』ものと定義されている"
+        }
+      ],
+      "notMapped": "この行は定義文であって shall ではない。ID を捏造せずテーブル行参照で書き、level も required としている"
+    },
+    {
+      "id": "CT-ANNOT-15",
+      "title": "rendition action を持つ Screen 注釈は /P を持つこと",
+      "clauses": ["R-12.5.2-7"],
+      "source": { "spec": "pdf20", "section": "12.5.2", "table": "Table 166", "key": "P" },
+      "level": "shall",
+      "appliesTo": "annotation",
+      "when": [{ "fact": "annot.isScreenWithRendition", "op": "eq", "value": true }],
+      "assert": [
+        {
+          "fact": "annot.hasP",
+          "op": "eq",
+          "value": true,
+          "onFail": "rendition action に関連付けられた Screen 注釈に /P が無い。条文はこの場合に限り /P を必須としている"
+        }
+      ]
+    }
+  ]
+}

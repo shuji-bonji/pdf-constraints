@@ -21,7 +21,7 @@ const packageVersion: string = createRequire(import.meta.url)('../package.json')
 
 /** 同梱テーブルの名前一覧 */
 export function listTables(): string[] {
-  return ['font-embedding', 'document-metadata'];
+  return ['font-embedding', 'document-metadata', 'annotation'];
 }
 
 export function loadTable(name: string): ConstraintTable {

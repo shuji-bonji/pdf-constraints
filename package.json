@@ -1,6 +1,6 @@
 {
   "name": "@shuji-bonji/pdf-constraints",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Machine-checkable constraint tables mapping ISO 32000 clauses to PDF structural conditions, with a deterministic evaluator. A mapping layer — it does not quote the specification, and it cannot prove conformance",
   "keywords": [
     "pdf",

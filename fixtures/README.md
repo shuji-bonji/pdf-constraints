@@ -33,13 +33,42 @@
 「観測できる差異」を片端から違反にしていないことの確認である（R-14.3.4 の shall は日時のみで、
 dc:title の同期は条文の義務ではない）。
 
+## annotation — writer の AP 義務 / CR 正規化の是正前後（§12.5）
+
+| ファイル | 作り方 | 期待 |
+|---|---|---|
+| `bad-annot-0.9.1.pdf` | `@shuji-bonji/pdf-writer-mcp@0.9.1` の `create_text_pdf` → `add_annotation` × 3（text は `contents` に `\n` を含める / highlight / square） | CT-ANNOT-3 が 3 件・CT-ANNOT-5 が 1 件・CT-ANNOT-9 が 1 件（violations 5） |
+| `good-annot-0.16.0.pdf` | 同 v0.16.0 で同じ入力 | **CT-ANNOT-9 の 1 件のみ**（AP と CR は是正済み） |
+| `synthetic-annot-good.pdf` | `scripts/gen-annotation-specimens.mjs`（pdf-lib で直接組む） | 違反なし。かつ **15 制約すべてが 1 回以上 `pass` を通る** |
+| `synthetic-annot-bad.pdf` | 同スクリプト。CT-ANNOT-3 以外の 14 制約を 1 件ずつ故意に破る | 14 制約が発火（violations 17） |
+
+**good 側で `pass` を数えているのが要点。** 制約が全部 `not_applicable` でも violations は 0 になるので、
+「緑になった」だけでは規則が働いたことにならない。特に **CT-ANNOT-9 は合成検体で `pass` する**
+（条文どおりの反時計回り四辺形を置いてある）ので、writer 出力での fail が
+「常に落ちる規則」ではないことが確かめられる。
+
+`bad-annot` と `good-annot` の差が **AP と CR の 2 点だけ**で、
+`QuadPoints` は両版とも同じ（Z 順 = `nonSimple`）なのも意図どおり。
+writer は 0.9.1 でも 0.16.0 でも同じ順序で書いており、これは意図的な逸脱である。
+
 ## 再生成
 
 旧版は npm から取れる:
 
 ```sh
 npm i @shuji-bonji/pdf-writer-mcp@0.13.1   # font-embedding の bad 側
-npm i @shuji-bonji/pdf-writer-mcp@0.9.1    # document-metadata の bad-meta 側
+npm i @shuji-bonji/pdf-writer-mcp@0.9.1    # document-metadata の bad-meta 側 / annotation の bad 側
+npm i @shuji-bonji/pdf-writer-mcp@0.16.0   # annotation の good 側
 ```
+
+合成検体（`synthetic-annot-*`）はスクリプトで再生成できる:
+
+```sh
+node scripts/gen-annotation-specimens.mjs
+```
+
+> ⚠️ **0.9.1 の `add_annotation` は引数の形が違う**（1 回に 1 注釈・`inputPath` / `page` / `type` /
+> `rect` を直接取る）。現行の配列形式で呼ぶと検証エラーになるので、再生成時は旧版の
+> スキーマに合わせること。
 
 詳細な手順は `mcps/_constraint-table-poc/gen-specimens.md`。

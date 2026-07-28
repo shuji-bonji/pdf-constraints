@@ -8,6 +8,7 @@
 
 import type { PDFDocument } from 'pdf-lib';
 import type { Facts, Scope, Subject } from '../types.js';
+import { extractAnnotationFacts } from './annotation.js';
 import { extractDocumentFacts } from './document.js';
 import { extractEmbeddedFontFacts } from './embedded-font.js';
 
@@ -16,6 +17,7 @@ export type FactExtractor = (doc: PDFDocument, given: Facts) => Subject[];
 export const extractors: Record<Scope, FactExtractor> = {
   'embedded-font': extractEmbeddedFontFacts,
   document: (doc, given) => [extractDocumentFacts(doc, given)],
+  annotation: extractAnnotationFacts,
 };
 
 /** テーブル群が要求する scope の分だけ subject を集める */

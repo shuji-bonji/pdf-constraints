@@ -88,8 +88,8 @@
         "level": { "type": "string", "description": "shall / should / required など条文の要求水準" },
         "appliesTo": {
           "type": "string",
-          "enum": ["embedded-font", "document"],
-          "description": "評価スコープ。将来 annotation / page を追加する"
+          "enum": ["embedded-font", "document", "annotation"],
+          "description": "評価スコープ。annotation は注釈 1 個 = 1 subject。将来 page を追加しうるが、ページ単位の事実は fact 側で持たせて scope は増やさない方針（specs/20 §7-2）"
         },
         "subjectNote": {
           "type": "string",

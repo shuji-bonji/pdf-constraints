@@ -64,6 +64,7 @@ import table from '@shuji-bonji/pdf-constraints/tables/font-embedding.json' with
 |---|---|---|
 | `font-embedding` | §9.9.1 / §9.9.2 / §9.7.4.2 (including Tables 124 and 125) | CT-FONT-1〜5 — the embedding key matching the program inside it, subset name tags, `Length1` |
 | `document-metadata` | §14.3.2 / §14.3.3 / §14.3.4 / §7.9.4 | CT-META-1〜6 — metadata stream type, date syntax, Info↔XMP equivalence, `Trapped` |
+| `annotation` | §12.5.2 / §12.5.3 / §12.5.5 / §12.5.6.2 / §12.5.6.10 (including Tables 166, 167, 172 and 182) | CT-ANNOT-1〜15 — the appearance dictionary a writer owes (`AP`), paragraph breaks in `Contents`, colour and flag syntax, `QuadPoints` winding, `Popup` / `IRT` relationships, one-page-only references |
 
 ## Four states
 

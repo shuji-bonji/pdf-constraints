@@ -18,7 +18,7 @@ export type PredicateOp =
   | 'dateEquiv';
 
 /** 評価スコープ。fact 抽出器はこの単位で登録される */
-export type Scope = 'embedded-font' | 'document';
+export type Scope = 'embedded-font' | 'document' | 'annotation';
 
 export interface Predicate {
   fact: string;
