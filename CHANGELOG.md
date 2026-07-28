@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-07-28
+
+### Added
+
+- **A failing assertion now carries its `note` into the result.** The tables have been able to
+  attach a note to an assertion since 0.1.0, but the evaluator dropped it, so it reached nobody.
+  `Failure.note` is optional and additive; consumers that ignore it are unaffected. The CLI
+  prints it as a `Context:` line.
+
+  This surfaced with CT-ANNOT-9. The clause requires counterclockwise `QuadPoints`
+  (R-12.5.6.10-5) and essentially every real-world writer uses Z order instead, deliberately,
+  because following the clause literally breaks rendering in major viewers. Without the note the
+  report said only "the vertex order is not counterclockwise" — true, and read as a defect. A
+  constraint whose failure needs context is not served by a message field alone: **the context
+  has to travel with the failure, or it does not exist.**
+
 ## [0.2.0] - 2026-07-28
 
 ### Added

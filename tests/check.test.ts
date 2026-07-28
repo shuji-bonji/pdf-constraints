@@ -136,6 +136,18 @@ describe('annotation — writer の AP 義務 / CR 正規化の是正前後（§
     expect(failure?.clauses).toContain('R-12.5.6.10-5');
   });
 
+  it('CT-ANNOT-9 の failure は、誤読を防ぐ note を伴って返る', async () => {
+    // 業界がほぼ一様に Z 順で書く以上、この fail は「実装の欠陥」ではない場合が大半になる。
+    // note が落ちると、技術的に正しいまま誤読される報告になってしまう
+    const report = await checkFile(fixture('good-annot-0.16.0'), options);
+    const failure = report.results
+      .flatMap((r) => r.failures ?? [])
+      .find((f) => f.fact === 'annot.quadPoints.winding');
+
+    expect(failure?.note).toContain('Z 順');
+    expect(failure?.note).toContain('欠陥を意味しない');
+  });
+
   it('合成の適合検体は違反ゼロで、どの制約も pass を 1 回以上通る', async () => {
     const report = await checkFile(fixture('synthetic-annot-good'), options);
     expect(report.violations).toBe(0);

@@ -147,6 +147,26 @@ describe('制約の状態遷移', () => {
     );
   });
 
+  it('assertion の note は failure に載る（判定は変えないが誤読を防ぐ文脈）', () => {
+    const annotated: Constraint = {
+      ...constraint,
+      when: [],
+      assert: [
+        { fact: 'doc.value', op: 'eq', value: 1, onFail: 'wrong', note: '業界慣行との齟齬' },
+      ],
+    };
+    const failed = evaluateConstraint(annotated, { 'doc.value': 2 });
+    expect(failed.failures?.[0].note).toBe('業界慣行との齟齬');
+
+    // note があっても状態は変わらない（説明であって判定ではない）
+    expect(evaluateConstraint(annotated, { 'doc.value': 1 }).status).toBe('pass');
+  });
+
+  it('note の無い assertion は failure に note を作らない', () => {
+    const result = evaluateConstraint({ ...constraint, when: [] }, { 'doc.value': 2 });
+    expect(result.failures?.[0]).not.toHaveProperty('note');
+  });
+
   it('subjectNote を持つ制約の failure は traceOnly になる', () => {
     const traced: Constraint = {
       ...constraint,

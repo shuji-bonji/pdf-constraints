@@ -104,6 +104,9 @@ function checkAssertion(
     fact: assertion.fact,
     actual: facts[assertion.fact],
     traceOnly: constraint.subjectNote !== undefined,
+    // 文脈を持つ制約（業界慣行との齟齬など）は、それが読み手に届かないと
+    // 「技術的に正しいが誤読される報告」になる。fail と同じ場所で運ぶ
+    ...(assertion.note === undefined ? {} : { note: assertion.note }),
   };
 }
 
@@ -166,6 +169,7 @@ export function evaluateDocumentAsserts(
           fact: assertion.fact,
           actual: tags,
           traceOnly: constraint.subjectNote !== undefined,
+          ...(assertion.note === undefined ? {} : { note: assertion.note }),
         });
       }
     }

@@ -42,6 +42,8 @@ function formatReport(report: CheckReport): string {
           `      ${failure.message}`,
           `      ${failure.fact} = ${JSON.stringify(failure.actual)}`,
         );
+        // 判定は変えないが、これが無いと誤読される文脈（業界慣行との齟齬など）
+        if (failure.note) lines.push(`      Context: ${failure.note}`);
       }
     } else if (result.status === 'needs_external_fact') {
       lines.push(

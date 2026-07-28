@@ -96,6 +96,13 @@ export interface Failure {
   actual: unknown;
   /** 主語が processor の条文か（レポート側で言い回しを変えるため機械可読にしておく） */
   traceOnly: boolean;
+  /**
+   * 違反した assertion の `note`。**判定は変えない**が、読み手が結果を誤読しないために要る文脈。
+   *
+   * 例: CT-ANNOT-9（QuadPoints の反時計回り）は条文どおりに書くと主要ビューアで表示が壊れるため、
+   * 業界がほぼ一様に逸脱している。これが無いと「ほぼ全ての PDF に欠陥がある」と読まれる。
+   */
+  note?: string;
 }
 
 /**
