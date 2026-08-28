@@ -6,6 +6,7 @@
  * ここでの検査は近似である — テーブル側の `notMapped` にその旨を書いてある。
  */
 
+import { decodeTextString } from 'normativepdf';
 import { decodePDFRawStream, PDFDict, type PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
 import type { Facts, Subject } from '../types.js';
 
@@ -14,11 +15,26 @@ function nameValue(dict: PDFDict, key: string): string | undefined {
   return value instanceof PDFName ? value.decodeText() : undefined;
 }
 
-/** Info の日付・文字列は PDFString / PDFHexString のどちらもありうる */
+/**
+ * Info の日付・文字列は PDFString / PDFHexString のどちらもありうる。
+ *
+ * 復号は normativepdf の `decodeTextString`（§7.9.2）に任せる。pdf-lib の
+ * `decodeText()` は **UTF-8 の BOM（R-7.9.2.2.1-4）を扱わない**ので、
+ * `EF BB BF` で始まる `/CreationDate` は PDFDocEncoding として読まれて日付にならない。
+ *
+ * 分岐の判定を `decodeText` から `asBytes` に変えてある。pdf-lib では PDFName も
+ * `decodeText` を持つので、以前は名前オブジェクトもここでテキスト文字列として復号していた。
+ * **名前はテキスト文字列ではない**（§7.3.5 と §7.9.2 は別の条項）。
+ */
 function stringValue(value: unknown): string | null {
   if (value === undefined || value === null) return null;
-  const candidate = value as { decodeText?: () => string; asString?: () => string };
-  if (typeof candidate.decodeText === 'function') return candidate.decodeText();
+  const candidate = value as {
+    asBytes?: () => number[] | Uint8Array;
+    asString?: () => string;
+  };
+  if (typeof candidate.asBytes === 'function') {
+    return decodeTextString(Uint8Array.from(candidate.asBytes()));
+  }
   if (typeof candidate.asString === 'function') return candidate.asString();
   return String(value).replace(/^\(|\)$/g, '');
 }

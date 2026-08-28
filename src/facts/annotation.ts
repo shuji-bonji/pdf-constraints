@@ -10,6 +10,7 @@
  * 観測できなかったものは `null`（= 未取得）にする。false に倒すと冤罪になる。
  */
 
+import { decodeTextString } from 'normativepdf';
 import {
   PDFArray,
   PDFDict,
@@ -104,9 +105,19 @@ function numbersOf(context: Context, value: unknown): number[] | null {
   return out;
 }
 
-/** テキスト文字列。UTF-16BE（PDFHexString）と PDFDocEncoding（PDFString）の両方 */
+/**
+ * テキスト文字列（§7.9.2）。**どの文字列がテキスト文字列かは、辞書のキーが決める**
+ * （R-7.9.2.1-1）。ここに来る値はそのキーの下にあるものだけである。
+ *
+ * 復号は normativepdf の `decodeTextString` に任せる。pdf-lib の `decodeText()` は
+ * UTF-16BE と PDFDocEncoding しか見ず、**UTF-8 の BOM（R-7.9.2.2.1-4・PDF 2.0）を
+ * 扱わない**し、言語エスケープ列（§7.9.2.2.2）も取り除かない。
+ * 語彙は同じ Table D.3 から起こしてあるので、その 2 つ以外では同じ値になる。
+ */
 function textOf(value: unknown): string | null {
-  if (value instanceof PDFHexString || value instanceof PDFString) return value.decodeText();
+  if (value instanceof PDFHexString || value instanceof PDFString) {
+    return decodeTextString(Uint8Array.from(value.asBytes()));
+  }
   return null;
 }
 

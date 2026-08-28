@@ -1,11 +1,17 @@
 /**
- * 述語評価器 — 依存ゼロの純粋関数。
+ * 述語評価器 — 純粋関数だけで書く。
  *
  * **同じ facts からは常に同じ結果**を返す（evaluate_policy のルールエンジンと同じ規律）。
  * ここに I/O・時刻・乱数を持ち込まないこと。判定の再現性がこのパッケージの価値であり、
  * テーブルと評価意味論が同一バージョンで結束していることがその担保になっている。
+ *
+ * 唯一の実行時依存は normativepdf の `parsePdfDate`（§7.9.4 の文法）である。純粋関数で、
+ * I/O も時刻も持たない。自前の正規表現を捨てたのは、条文の細目——アポストロフィと
+ * 分オフセットの前後関係（R-7.9.4-14 / -15）や既定値規則（R-7.9.4-16）——を
+ * 2 か所で持たないため。
  */
 
+import { parsePdfDate as parsePdfDateFields } from 'normativepdf';
 import type {
   Assertion,
   Constraint,
@@ -19,37 +25,35 @@ import type {
 /**
  * PDF 日付文字列（ISO 32000-2 §7.9.4）→ epoch ms。文法違反・値域外は null。
  *
- * §7.9.4 の既定値規則（MM/DD は 01、他は 0）と UT オフセットを解釈する。
- * 「D:」以降は前方のフィールドが揃っている限り任意の位置で切れてよい（R-7.9.4-12）。
+ * **公開しているのはこの形（epoch ms）である。** 文法の解釈は normativepdf に置き、
+ * ここは `PdfDate` の各欄を UT へ畳む変換だけを持つ。`dateEquiv` 述語が数値の比較を
+ * 前提にしているので、戻り値の形は変えない。欄そのものが要る消費者は
+ * normativepdf の `parsePdfDate` を直接呼ぶこと。
+ *
+ * UT 情報が無い（`utRelationship === null`）ときは GMT とみなす（R-7.9.4-17）。
+ *
+ * ⚠️ 既知の欠陥（移行前からある。ここでは直さない）: `Date.UTC` は年 0〜99 を
+ * 1900〜1999 に写す。`D:0050...` は 1950 年になる。直すと A/B に差が出て、
+ * pdf-lib 撤去による差と混ざるため、別の変更で直す。
  */
 export function parsePdfDate(value: unknown): number | null {
   if (typeof value !== 'string') return null;
-  const m =
-    /^D:(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?(?:([Z+-])(?:(\d{2})'?(\d{2})?'?)?)?$/.exec(
-      value,
-    );
-  if (!m) return null;
-  const [
-    ,
-    year,
-    month = '01',
-    day = '01',
-    hour = '00',
-    min = '00',
-    sec = '00',
-    sign,
-    oh = '00',
-    om = '00',
-  ] = m;
-  const mo = Number(month);
-  const d = Number(day);
-  const h = Number(hour);
-  const mi = Number(min);
-  const s = Number(sec);
-  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) return null;
-  const offsetMinutes =
-    sign === '+' || sign === '-' ? (Number(oh) * 60 + Number(om)) * (sign === '-' ? -1 : 1) : 0; // R-7.9.4-17: UT 情報が無ければ GMT とみなす
-  return Date.UTC(Number(year), mo - 1, d, h, mi, s) - offsetMinutes * 60_000;
+  const parsed = parsePdfDateFields(value);
+  if (parsed === null) return null;
+  const signed =
+    parsed.utRelationship === '+' ? 1 : parsed.utRelationship === '-' ? -1 : 0;
+  const offsetMinutes = signed * (parsed.offsetHours * 60 + parsed.offsetMinutes);
+  return (
+    Date.UTC(
+      parsed.year,
+      parsed.month - 1,
+      parsed.day,
+      parsed.hour,
+      parsed.minute,
+      parsed.second,
+    ) -
+    offsetMinutes * 60_000
+  );
 }
 
 /** 述語 1 つを評価する */

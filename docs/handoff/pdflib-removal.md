@@ -212,6 +212,46 @@ B1 が要る記号は 14/14 が 0.9.0 の公開面にある（`parsePdf` `decode
 `CosString` `CosStream` `CosRef` `readPageTree`。2026-08-28 実測）。
 自前の `parsePdfDate` の扱いは §3 の例外 2 を見ること。
 
+#### 🔴 `decodeText()` 6 か所のうち、テキスト文字列は 2 か所だけだった（2026-08-28 実測）
+
+`decodeText()` は pdf-lib のメソッド名であって、条項の名前ではない。中身は 2 つに割れる。
+
+| 場所 | 受け取る型 | 条項 | L1 で置き換えるか |
+|---|---|---|---|
+| `document.ts` の `stringValue`（Info の日付） | `PDFString` / `PDFHexString` | **§7.9.2 テキスト文字列** | **する** |
+| `annotation.ts` の `textOf`（`/Contents` 等） | `PDFString` / `PDFHexString` | **§7.9.2 テキスト文字列** | **する** |
+| `document.ts` の `nameValue` | `PDFName` | §7.3.5 名前 | しない |
+| `document.ts` の `/Trapped` | `PDFName` | §7.3.5 名前 | しない |
+| `embedded-font.ts` の `nameValue` | `PDFName` | §7.3.5 名前 | しない |
+| `annotation.ts` の `nameOf` | `PDFName` | §7.3.5 名前 | しない |
+
+**名前はテキスト文字列ではない。** `decodeTextString` を名前のバイト列に当てると、
+`#xx` の解決が無いうえに PDFDocEncoding として読むので、UTF-8 の名前（R-7.3.5-13）が壊れる。
+名前の 4 か所は **L2 で `CosName.value` に置き換わる**（`#xx` の解決と UTF-8 の復号は
+normativepdf の字句解析が済ませている）。L1 で触るのは 2 か所である。
+
+L1 で入れた変更（2026-08-28）:
+
+- `dependencies` に `normativepdf: 0.9.0` を足した（`pdf-lib` はまだ残る）
+- 上の 2 か所を `decodeTextString(Uint8Array.from(value.asBytes()))` にした
+- `stringValue` の分岐を `decodeText` から **`asBytes`** に変えた。pdf-lib では
+  `PDFName` も `decodeText` を持つので、以前は名前もここでテキスト文字列として復号していた
+- `evaluate.ts` の `parsePdfDate` を、normativepdf の `parsePdfDate` の戻り値
+  （`PdfDate`）を UT へ畳む薄い変換にした。**公開している形（`number | null`）は変えない**
+
+**予測される A/B の差**（`node scripts/golden.mjs diff .golden/before.json .golden/after-L1.json`）:
+
+1. **UTF-8 BOM 付きのテキスト文字列**が読めるようになる（pdf-lib 1.x は `R-7.9.2.2.1-4` を
+   満たしていない）。normativepdf のコーパス実測では、テキスト文字列 2,612 件のうち
+   差は 6 件で**すべてこれ**。日付でも 941 件中 2 件が該当する（読めなかった → 読める）
+2. **UTF-16BE の言語エスケープ列**（§7.9.2.2.2）が取り除かれる。pdf-lib は残していた
+3. **日付の文法が条文どおりになる。** アポストロフィと分オフセットの前後関係
+   （R-7.9.4-14 / -15）を守らない文字列は `null` になる。PDF 1.7 の末尾アポストロフィは
+   受け入れる（NOTE 2）ので、既存のテストはそのまま通るはず
+
+1 と 3 は**是正**（条文が正）。2 は言語エスケープ列を持つ検体があれば出る。
+**どれも「予測」であって、出なかったら出なかったことを書く。**
+
 ### L2. `src/check.ts` の入口を `parsePdf` へ
 
 `PDFDocument.load(bytes, { updateMetadata: false })` → `parsePdf(bytes)`。
