@@ -423,6 +423,45 @@ trailer Info: 108 0 R（xref に無いので解決できない）
 「注釈が 1 つも無い文書」と「注釈を読めなかった文書」が同じ顔になる。
 `doc.chainStop` は `PdfDocument` が持っているので、観測できる。
 
+#### 決裁と対処（2026-08-28・shuji）— **L2+L3 は受入充足**
+
+- **未決 1 = 案 B。** 指し先はあるのに**条文違反で受け取れなかった**とき
+  `descriptor.fontFileKey` を `unreadable` にする。`CT-FONT-1` / `CT-FONT-4` は
+  `when` がこの fact で門を開けているので `not_applicable` に落ちる。行は残る。
+  🔴 **一度これを広く取りすぎて後退を作った**: 指し先が**存在しない**参照まで
+  `unreadable` にしたため、`CT-FONT-5` が 2,931 件で唯一 fail していた検体
+  （`6.2.11.4.1 Embedding` = フォントが埋め込まれていない）が `not_applicable` に落ちた。
+  **計器の軸の申告「一度も fail しない制約」が 1 → 2 件に増えて捕まえた。**
+  未定義の間接参照が null と等価なのは R-7.3.10-13 が定めることで、**観測できた事実**である。
+  `cos.ts` の `tryLookup` で 2 つを分けた
+- **未決 2 = `CheckReport.observation` を足す。** `xrefChain` / `objects` /
+  `pagesReached` / `pages`。**判定ではなく判定の射程。** CLI は `complete` でないときだけ
+  1 行足す（`exit 0` は「違反が無かった」であって「全部を検査できた」ではない、と
+  同じ位置）
+
+#### L2+L3 の最終 A/B（2026-08-28・2,931 検体）— 全 10 群の帰属
+
+`npm run build` / `npm test`（38 件）/ `npm run check` は通る。
+**`pass → fail` 0 件・`fail → not_applicable` 0 件・「一度も fail しない制約」は
+`CT-FONT-3` の 1 件のまま**（L0 と同じ）。
+
+| 遷移 | 件数 | 帰属 |
+|---|---|---|
+| 行が消えた | 115 | **観測の範囲**。105 行は `_wout/dss-pades-...-w2.pdf`（`/Prev 0` でチェーン打ち切り・`observation` が申告）、10 行は名前のラベル変更の片側 |
+| 読めた → 読めない | 14 | **厳格化**。エラーが条文を名指ししている（§7.5.4 の xref・§7.5.2 のヘッダ・§7.7.2 の catalog `/Version`）。14 件とも veraPDF の *fail* 検体 |
+| 行が増えた | 10 | **是正**。`TMJTIB+FreeMonoBold#c4` → `TMJTIB+FreeMonoBoldÄ`（`#xx` の解決・R-7.3.5-13）。消えた 10 行と対で、判定は同じ |
+| `pass → not_applicable` | 9 | 7 件は `CT-META-1/2/4`（Info / XMP が読めた範囲に無い・`observation` が申告）、2 件は `CT-FONT-1/4`（`unreadable`） |
+| 読めなかった → 読めた | 4 | **是正**。暗号化 4 検体。normativepdf は材料化の時点で復号する |
+| `not_applicable → pass` | 2 | **是正**。`Isartor test suite manual.pdf` の `CT-META-4/5`。実測: **pdf-lib は `trailerInfo` に `Info` の鍵を持ちながら値を `undefined` で落としていた**（`XRefStm` を持つハイブリッド文書）。normativepdf は `Info = 283 0 R` を読む。日付が揃ったので `when` が成立し、Info と XMP は完全等価で `pass` |
+| `subjects` | 1 | 上記 `_wout`（10 → 1） |
+| `violations` | 1 | `pdf20-utf8-test.pdf`（2 → 0） |
+| `fail → pass` | 1 | **是正**。UTF-8 BOM の日付（L1 から継続） |
+| 読めない理由の文言 | 1 | ヘッダの検体。前後とも読めない。文言が条文を名指しする側に変わった |
+
+**受入 3 面の判定**: 面 1（撤去）は `src/` から `pdf-lib` 0 件で L4 待ち。
+面 2（判定の A/B）は上表のとおり全件帰属済みで、後退は 0 件。
+面 3（独立オラクル）は pdf-lib で採ったゴールデンがそのまま担っている。
+
 ### L4. `registry.ts` の型を差し替え、`package.json` から pdf-lib を落とす
 
 `FactExtractor` の公開をどうするかは §6 の未決 1 に従う。
