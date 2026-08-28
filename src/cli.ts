@@ -64,6 +64,19 @@ function formatReport(report: CheckReport): string {
     'Note: the absence of failures is not proof of conformance — only that nothing in the',
     'bundled constraints could be disproved.',
   );
+
+  // 読めた範囲がファイル全体でなかったときは黙って終わらない。
+  // 「注釈が無い」と「注釈を読めなかった」を読み手が見分けられるようにする。
+  const { xrefChain, objects, pages, pagesReached } = report.observation;
+  if (xrefChain !== 'complete' || !pagesReached) {
+    lines.push(
+      '',
+      `Observation: xref chain ${xrefChain}, ${objects} object(s), ${pages} page(s)` +
+        (pagesReached ? '' : ' — page tree not reached'),
+      'The document was not read whole. A scope with no subjects here does not mean the',
+      'document has none: the objects that would carry them were not among those read.',
+    );
+  }
   return lines.join('\n');
 }
 

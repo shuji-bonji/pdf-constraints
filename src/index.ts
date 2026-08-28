@@ -27,6 +27,7 @@ export type {
   ConstraintTable,
   Facts,
   Failure,
+  Observation,
   Predicate,
   PredicateOp,
   Scope,

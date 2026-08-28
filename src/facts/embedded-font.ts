@@ -111,19 +111,33 @@ export async function extractEmbeddedFontFacts(doc: PdfDocument, given: Facts): 
 
     if (streamValue !== undefined) {
       const stream = asStream(await lookup(doc, streamValue));
-      if (stream !== null) {
+      if (stream === null) {
+        // 🔴 参照はあるのにストリームが取れなかった = **観測できなかった**。
+        // ここで facts を初期値 null のまま残すと、制約は「フォントプログラムが
+        // 読めなかった」ではなく「違反している」と判定する（2026-08-28 に実測:
+        // R-7.3.8.1-6 違反の検体で CT-FONT-1 / CT-FONT-4 が pass -> fail になった）。
+        // `unreadable` を立てると、両制約の `when` がこの fact で門を開けているので
+        // not_applicable に落ちる —— 行は残り、「判定しなかった」と読める。
+        facts['descriptor.fontFileKey'] = 'unreadable';
+      } else {
         facts['stream.dict.Subtype'] = nameOf(dictGet(stream.dict, 'Subtype'));
         facts['stream.dict.Length1'] = numberOf(dictGet(stream.dict, 'Length1'));
-
-        const decoded = await decodedBytes(doc, stream);
-        facts['stream.decodedLength'] = decoded.length;
-        const program = inspectProgram(decoded);
-        facts['program.container'] = program.container;
-        facts['program.sfntTables'] = program.tables;
-        facts['program.isCffBased'] =
-          program.container === 'otto' ||
-          program.container === 'bareCFF' ||
-          program.tables.includes('CFF ');
+        try {
+          const decoded = await decodedBytes(doc, stream);
+          facts['stream.decodedLength'] = decoded.length;
+          const program = inspectProgram(decoded);
+          facts['program.container'] = program.container;
+          facts['program.sfntTables'] = program.tables;
+          facts['program.isCffBased'] =
+            program.container === 'otto' ||
+            program.container === 'bareCFF' ||
+            program.tables.includes('CFF ');
+        } catch {
+          // 復号できないフォントプログラムも「観測できなかった」側。上と同じ扱いにする
+          facts['descriptor.fontFileKey'] = 'unreadable';
+          facts['stream.dict.Subtype'] = null;
+          facts['stream.dict.Length1'] = null;
+        }
       }
     }
 

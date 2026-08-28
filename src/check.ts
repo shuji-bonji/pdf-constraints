@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parsePdf } from 'normativepdf';
+import { parsePdf, readPageTree } from 'normativepdf';
 import { evaluateConstraint, evaluateDocumentAsserts } from './evaluate.js';
 import { collectSubjects } from './facts/registry.js';
 import type { CheckReport, ConstraintTable, Facts, Scope } from './types.js';
@@ -54,9 +54,22 @@ export async function checkBytes(
   const scopes: Scope[] = tables.flatMap((t) => t.constraints.map((c) => c.appliesTo));
   const subjectsByScope = await collectSubjects(doc, scopes, given);
 
+  // どこまで読めたか。判定ではないが、**判定の射程**なので必ず載せる。
+  // 「注釈が無い」と「注釈を読めなかった」を利用者が見分けられるようにする。
+  const tree = await readPageTree({
+    resolve: (value) => doc.resolve(value),
+    getCatalog: () => doc.getCatalog(),
+  }).catch(() => null);
+
   const report: CheckReport = {
     packageVersion,
     tables: tables.map((t) => ({ name: t.name, version: t.version })),
+    observation: {
+      xrefChain: doc.chainStop.kind,
+      objects: doc.xref.size,
+      pagesReached: tree?.reached ?? false,
+      pages: tree?.pages.length ?? 0,
+    },
     subjects: [...subjectsByScope.values()].reduce((sum, list) => sum + list.length, 0),
     results: [],
     violations: 0,

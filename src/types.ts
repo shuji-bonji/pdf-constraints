@@ -125,10 +125,39 @@ export interface ConstraintResult {
   missing?: string;
 }
 
+/**
+ * どこまで読めたか。**判定ではない。**
+ *
+ * 「注釈が 1 つも無い文書」と「注釈を読めなかった文書」は `results` の上では同じ顔になる。
+ * 観測の範囲がファイル全体でなかったことは、ここでしか言えない。
+ *
+ * 出自: 2026-08-28、`/Prev 0` でリビジョンチェーンが打ち切られた文書で subject が
+ * 10 → 1 に減った。相互参照表には最新セクションの 9 件しか無く、ページツリーにも
+ * 到達できていない。それでも `results` は「違反なし」の顔をしていた。
+ */
+export interface Observation {
+  /**
+   * リビジョンチェーンの歩きがどこで止まったか（§7.5.6）。`complete` 以外は、
+   * **ここで読めていないリビジョンがある** = 観測は文書全体ではない。
+   */
+  xrefChain: string;
+  /** 相互参照表に載っている（= 読めるはずの）オブジェクトの数 */
+  objects: number;
+  /**
+   * ページツリーに到達できたか。`false` のとき、注釈の subject が 0 件でも
+   * 「注釈が無い」ことを意味しない。
+   */
+  pagesReached: boolean;
+  /** 到達できたページ数 */
+  pages: number;
+}
+
 export interface CheckReport {
   /** 判定に使ったテーブルの出所（決定論の由来を言えるようにする） */
   packageVersion: string;
   tables: { name: string; version: string }[];
+  /** どこまで読めたか（判定ではない） */
+  observation: Observation;
   subjects: number;
   results: ConstraintResult[];
   violations: number;
