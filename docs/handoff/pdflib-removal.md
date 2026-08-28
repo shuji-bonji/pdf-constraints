@@ -370,6 +370,59 @@ pdf-lib は `R-7.9.2.2.1-4` を実装していないので、この 3 バイト�
    `PDFRef` が文字列化されて `"1 0 R"` が fact に入っていた（それも日付ではないので
    `CT-META-3` は fail のまま。判定は動かない見込み）
 
+#### L2+L3 の A/B 実測（2026-08-28・2,931 検体）
+
+`npm run build` / `npm test`（38 件）/ `npm run check` は通った。A/B は
+**受入違反 131 件・帰属を書く差 27 件**。中身は 5 群に分かれる。
+
+| 群 | 件数 | 帰属 |
+|---|---|---|
+| 暗号化 4 検体が「読めなかった → 読めた」 | 4 | **是正**（予測 1。normativepdf は材料化の時点で復号する） |
+| 名前が `TMJTIB+FreeMonoBold#c4` → `TMJTIB+FreeMonoBoldÄ` | 10 行（2 検体・消えて増える） | **是正**（予測 4。`#xx` の解決。判定は同じで label だけ動いた） |
+| UTF-8 BOM の日付（L1 から継続） | 2 | **是正** |
+| 「読めた → 読めない」14 件 | 14 | **厳格化**（予測 2）。エラーが条文を名指ししている（§7.5.4 の xref・§7.5.2 のヘッダ・§7.7.2 の catalog `/Version`）。すべて veraPDF の *fail* 検体 |
+| 🔴 **未決 2 件**（下記） | 115 + 2 | **後退。受入を満たさない** |
+
+##### 🔴 未決 1 — 「観測できなかった」が「違反」に化ける（`pass → fail` 2 件）
+
+`PDF_A-2b/6.1.7.1 General/veraPDF test suite 6-1-7-1-t01-fail-a.pdf` で
+`CT-FONT-1` と `CT-FONT-4` が `pass → fail`。実測した原因:
+
+```
+FontDescriptor obj 15 → FontFile2 = 17 0 R
+  resolve 失敗: keyword "stream" shall be followed by CRLF or LF, not CR alone
+                (R-7.3.8.1-6) (at byte 5580)
+```
+
+意図的に壊した検体で、normativepdf は条文どおり拒否する。pdf-lib は緩く読めていた。
+`cos.ts` の `lookup` がその失敗を握って `undefined` を返すため、
+`program.container` / `stream.dict.Length1` が**初期値 `null` のまま**制約に食われ、
+「フォントプログラムが読めなかった」ではなく「**違反している**」と判定された。
+
+**この repo が冒頭で自ら禁じている形である**（「観測できなかったものは `null`（= 未取得）。
+false に倒すと冤罪になる」）。評価器の 4 状態に「観測できなかった」は無く、
+`needs_external_fact` は `given.*` の未供給専用である。
+
+##### 🔴 未決 2 — 観測が不完全なまま判定が出る（`行が消えた` 115 件の実体）
+
+`_wout/dss-pades-5sigs-doctimestamp-w2.pdf` で subjects が **10 → 1**。実測:
+
+```
+chainStop {"kind":"prev-zero","offset":335210}
+xref エントリ 9 / 取れた dict 6・array 1・stream 1 / 落ちた 0
+readPageTree → pages 0, reached false
+trailer Info: 108 0 R（xref に無いので解決できない）
+```
+
+**`/Prev 0` でリビジョンチェーンが打ち切られている**ので、`xref` には最新セクションの
+9 件しか無い。pdf-lib は全リビジョンのオブジェクトを列挙していた。結果、注釈 6 と
+フォント 3 の subject が消え、`CT-META-1/2/4` が `pass → not_applicable` に落ちた。
+
+**normativepdf は正しい**（[[prev-zero-swallowed-is-a-complete-chain]] と同じ線）。
+問題は、**その文書の観測が不完全であることが `CheckReport` のどこにも出ない**こと。
+「注釈が 1 つも無い文書」と「注釈を読めなかった文書」が同じ顔になる。
+`doc.chainStop` は `PdfDocument` が持っているので、観測できる。
+
 ### L4. `registry.ts` の型を差し替え、`package.json` から pdf-lib を落とす
 
 `FactExtractor` の公開をどうするかは §6 の未決 1 に従う。

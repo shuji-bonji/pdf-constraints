@@ -155,10 +155,7 @@ async function collectPages(doc: PdfDocument): Promise<PageAnnots[]> {
   return out;
 }
 
-export async function extractAnnotationFacts(
-  doc: PdfDocument,
-  given: Facts,
-): Promise<Subject[]> {
+export async function extractAnnotationFacts(doc: PdfDocument, given: Facts): Promise<Subject[]> {
   const pages = await collectPages(doc);
 
   // R-12.5.2-2: 同じ注釈辞書が複数ページの Annots から参照されていないか

@@ -64,10 +64,7 @@ async function* indirectObjects(doc: PdfDocument): AsyncGenerator<Indirect> {
  * 文書中の埋め込みフォントを 1 つずつ subject にする。
  * FontDescriptor を軸に、参照元のフォント辞書（/Subtype・/BaseFont）を逆引きする。
  */
-export async function extractEmbeddedFontFacts(
-  doc: PdfDocument,
-  given: Facts,
-): Promise<Subject[]> {
+export async function extractEmbeddedFontFacts(doc: PdfDocument, given: Facts): Promise<Subject[]> {
   const fontByDescriptor = new Map<string, { subtype?: string; baseFont?: string }>();
 
   for await (const { object } of indirectObjects(doc)) {

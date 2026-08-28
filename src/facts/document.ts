@@ -41,7 +41,8 @@ export async function extractDocumentFacts(doc: PdfDocument, given: Facts): Prom
   }
 
   const catalog = asDict(await doc.getCatalog().catch(() => undefined));
-  const metadata = catalog === null ? null : asStream(await lookup(doc, dictGet(catalog, 'Metadata')));
+  const metadata =
+    catalog === null ? null : asStream(await lookup(doc, dictGet(catalog, 'Metadata')));
   if (metadata !== null) {
     facts['doc.xmp.exists'] = true;
     facts['doc.xmp.dict.Type'] = nameOf(dictGet(metadata.dict, 'Type'));
