@@ -492,6 +492,24 @@ node scripts/golden.mjs diff .golden/before-full.json .golden/after-L4.json # L3
 ⚠️ `npm ls pdf-lib` は `npm install` で `node_modules` を作り直してから見る
 （`package.json` から消しただけでは木に残っている）。
 
+#### 実測（2026-08-28）— **B1 は受入 3 面とも充足**
+
+```
+npm ls pdf-lib            -> (empty)
+grep "from 'pdf-lib'" src -> 0 件（exit 1）
+npm test                  -> 38 件
+diff after-L3c -> after-L4 -> 差 0 件（L4 は意味を変えていない）
+take after-L4             -> packageVersion 0.4.0 / 一度も fail しない 1 件: CT-FONT-3
+```
+
+| 面 | 判定 |
+|---|---|
+| 面 1 — 撤去 | ✅ `src` 0 件・`dependencies` から消え・`npm ls` の木からも消えた |
+| 面 2 — 判定の A/B | ✅ 差は全 10 群とも帰属済み。`pass → fail` 0 件・`fail → not_applicable` 0 件・「一度も fail しない制約」は L0 と同じ 1 件 |
+| 面 3 — 独立オラクル | ✅ pdf-lib が在るうちに採った `.golden/before-full.json`（2,931 検体）がそのまま第 2 の読み手。**撤去後に作り直さない** |
+
+残りは publish（tag `v0.4.0`）と、その版を取り込む B2。
+
 ## 6. 受入基準（3 面・着手前に決める）
 
 ### 面 1 — 撤去
