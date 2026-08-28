@@ -462,9 +462,35 @@ trailer Info: 108 0 R（xref に無いので解決できない）
 面 2（判定の A/B）は上表のとおり全件帰属済みで、後退は 0 件。
 面 3（独立オラクル）は pdf-lib で採ったゴールデンがそのまま担っている。
 
-### L4. `registry.ts` の型を差し替え、`package.json` から pdf-lib を落とす
+### L4. 公開面を閉じ、`package.json` から pdf-lib を落とす（2026-08-28 実施）
 
-`FactExtractor` の公開をどうするかは §6 の未決 1 に従う。
+- **案 B のとおり `collectSubjects` / `extractors` / `FactExtractor` の export をやめた。**
+  fact の抽出は内部に閉じた。入口は `checkBytes` / `checkFile` の 2 つ。
+  `registry.ts` の型は `PdfDocument` ベースのまま内部に残る（L2+L3 で差し替え済み）
+- **`dependencies` から `pdf-lib` を落とした。** `devDependencies` にも置かない
+  （§7 未決 2 の推しどおり。二面性は「pdf-lib で採ったゴールデン」が担う）
+- **0.3.0 → 0.4.0**（0.x のまま minor + 告知。決裁 2026-08-27）
+- CHANGELOG に、公開面から消えた 2 つ・`observation` と `unreadable` の追加・
+  判定が変わる 10 群を書いた
+
+#### L4 自身の検査
+
+L4 はコードの意味を変えない（export をやめるのと依存を落とすだけ）ので、
+**`.golden/after-L3c.json` との差は 0 件でなければならない**。これが L4 の検査である。
+
+```bash
+npm run build && npm test && npm run check
+npm ls pdf-lib                       # 面 1: 依存ツリーから消えたこと
+grep -rn "from 'pdf-lib'" src/       # 面 1: 0 件
+node scripts/golden.mjs take .golden/after-L4.json --label after-L4 \
+  --set fixtures --set ../normativepdf/corpus/veraPDF-corpus \
+  --set ../normativepdf/corpus/pdf20examples --set ../normativepdf/corpus/_wout
+node scripts/golden.mjs diff .golden/after-L3c.json .golden/after-L4.json   # 差 0 件
+node scripts/golden.mjs diff .golden/before-full.json .golden/after-L4.json # L3c と同じ内訳
+```
+
+⚠️ `npm ls pdf-lib` は `npm install` で `node_modules` を作り直してから見る
+（`package.json` から消しただけでは木に残っている）。
 
 ## 6. 受入基準（3 面・着手前に決める）
 

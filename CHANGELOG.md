@@ -2,6 +2,66 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-08-28
+
+`pdf-lib` is gone from the dependencies; PDFs are read through
+[`normativepdf`](https://www.npmjs.com/package/normativepdf) 0.9.0, which reads the clauses
+directly. **Some files are judged differently as a result.** The change was measured over 2,931
+specimens (`fixtures` + the veraPDF corpus + the PDF 2.0 examples + round-trip output) against a
+frozen report taken while pdf-lib was still in place, and every difference is accounted for:
+**no `pass → fail`, and no `fail → not_applicable`** — that is, no constraint stopped being able
+to disprove anything.
+
+### Removed
+
+- **`collectSubjects`, `extractors` and `FactExtractor` are no longer exported** (breaking).
+  Fact extraction is internal now. The extractors are meant to be replaceable, and a consumer
+  holding their type makes the public surface move every time the reader underneath changes.
+  The entry points are `checkBytes` and `checkFile`. If an external extension point is ever
+  needed, it will come back in a form that does not name a parser's types.
+- `pdf-lib` is no longer a dependency (and is not in `devDependencies` either).
+
+### Added
+
+- **`CheckReport.observation` — how much of the file was read. It is not a verdict.**
+  `xrefChain` (where the walk up the `/Prev` chain stopped, §7.5.6), `objects`, `pagesReached`
+  and `pages`. "A document with no annotations" and "a document whose annotations could not be
+  read" look the same in `results`; that the observation did not cover the whole file can only
+  be said here. The CLI prints one line about it when `xrefChain` is not `complete`.
+- **`descriptor.fontFileKey` can now be `unreadable`** — the font program is referenced, but the
+  object could not be taken (a clause violation) or could not be decoded. Every constraint that
+  looks at embedding gates on this fact, so they fall to `not_applicable`: **what could not be
+  observed is not reported as a violation.** A reference whose target does not exist is *not*
+  `unreadable` — an undefined indirect reference is equal to null (R-7.3.10-13), which is
+  something observed about the file, so the constraints still judge it.
+
+### Changed
+
+- **Text strings with a UTF-8 byte order mark are read** (R-7.9.2.2.1-4, PDF 2.0). pdf-lib 1.x
+  does not implement this: a `/CreationDate` beginning `EF BB BF` was decoded as PDFDocEncoding
+  and became `ï»¿D:...`, so `CT-META-3` **reported two violations against a conforming file**.
+  Language escape sequences in UTF-16BE strings (§7.9.2.2.2) are now removed as well.
+- **Date syntax follows `normativepdf`'s `parsePdfDate` (§7.9.4).** The exported
+  `parsePdfDate(value): number | null` keeps its shape.
+- **A name object's `#xx` escapes are resolved in `target`** (R-7.3.5-13): a report that read
+  `TMJTIB+FreeMonoBold#c4` now reads `TMJTIB+FreeMonoBoldÄ`.
+- **A dictionary entry whose value is null counts as absent** (R-7.3.7-7).
+- **Encrypted documents can be read.** `parsePdf` decrypts as the objects are materialised (§7.6).
+- **The trailer `/Info` of a hybrid-reference file (`XRefStm`) is read.** pdf-lib carried the key
+  with an undefined value, so the Info dates were never observed.
+- 🔴 **A file whose structure violates the clauses is no longer read at all.** The
+  cross-reference table (§7.5.4), the file header (§7.5.2) and the catalog `/Version`
+  (§7.7.2 Table 29) are read strictly, and recovery is left to the consumer. Fourteen corpus
+  specimens are affected, all of them deliberately broken *fail* files. `checkBytes` and
+  `checkFile` throw for those.
+- 🔴 **When the revision chain is truncated, only what was read is judged.** On a `/Prev 0`
+  specimen the subject count went from 10 to 1. `observation` is what says so.
+
+### Requires
+
+- Node.js 20 or later (unchanged)
+- `normativepdf` 0.9.0
+
 ## [0.3.0] - 2026-07-28
 
 ### Added

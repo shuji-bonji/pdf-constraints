@@ -8,6 +8,12 @@
  *
  * fail が無いことは「収録した制約の範囲で反証できなかった」以上を意味しない。
  * 適合の証明ではない。
+ *
+ * **入口はバイト列とパスの 2 つ**（`checkBytes` / `checkFile`）。0.4.0 で
+ * `collectSubjects` / `extractors` / `FactExtractor` の公開をやめ、fact の抽出は
+ * 内部に閉じた。抽出器は差し替えうるもので、その型に外から依存されると
+ * 読み口を替えるたびに公開面が動く。外部の拡張点として必要になったときに、
+ * パーサ非依存の形で出し直す。
  */
 
 export { type CheckOptions, checkBytes, checkFile, listTables, loadTable } from './check.js';
@@ -17,7 +23,6 @@ export {
   evaluatePredicate,
   parsePdfDate,
 } from './evaluate.js';
-export { collectSubjects, extractors, type FactExtractor } from './facts/registry.js';
 export type {
   Assertion,
   CheckReport,
