@@ -8,7 +8,7 @@
 
 import { type CosObject, dictGet, type PdfDocument } from 'normativepdf';
 import type { Facts, Subject } from '../types.js';
-import { asDict, asRef, asStream, decodedBytes, lookup, nameOf, numberOf } from './cos.js';
+import { asDict, asRef, asStream, decodedBytes, nameOf, numberOf, tryLookup } from './cos.js';
 
 /** sfnt / bare CFF のコンテナ種別とテーブル一覧を、復号後のバイト列から読む */
 function inspectProgram(bytes: Uint8Array): { container: string; tables: string[] } {
@@ -110,15 +110,21 @@ export async function extractEmbeddedFontFacts(doc: PdfDocument, given: Facts): 
     };
 
     if (streamValue !== undefined) {
-      const stream = asStream(await lookup(doc, streamValue));
-      if (stream === null) {
-        // 🔴 参照はあるのにストリームが取れなかった = **観測できなかった**。
-        // ここで facts を初期値 null のまま残すと、制約は「フォントプログラムが
-        // 読めなかった」ではなく「違反している」と判定する（2026-08-28 に実測:
-        // R-7.3.8.1-6 違反の検体で CT-FONT-1 / CT-FONT-4 が pass -> fail になった）。
+      const found = await tryLookup(doc, streamValue);
+      const stream = asStream(found.value);
+      if (found.unreadable) {
+        // 🔴 指し先はあるのに条文違反で受け取れなかった = **観測できなかった**。
+        // facts を初期値 null のまま残すと、制約は「フォントプログラムが読めなかった」
+        // ではなく「違反している」と判定する（2026-08-28 実測: R-7.3.8.1-6 違反
+        // = stream の後が CR 単独 の検体で CT-FONT-1 / CT-FONT-4 が pass -> fail）。
         // `unreadable` を立てると、両制約の `when` がこの fact で門を開けているので
         // not_applicable に落ちる —— 行は残り、「判定しなかった」と読める。
         facts['descriptor.fontFileKey'] = 'unreadable';
+      } else if (stream === null) {
+        // 🔴 **ここは `unreadable` にしない。** 指し先が存在しない（未定義の間接参照は
+        // null と等価・R-7.3.10-13）のは、ファイルについて観測できた事実である。
+        // 「FontFile3 と名乗っているのにフォントプログラムが無い」は 6.2.11.4.1 の
+        // 検体がまさに測っているもので、判定を続ける。facts は初期値のまま。
       } else {
         facts['stream.dict.Subtype'] = nameOf(dictGet(stream.dict, 'Subtype'));
         facts['stream.dict.Length1'] = numberOf(dictGet(stream.dict, 'Length1'));

@@ -22,18 +22,39 @@ import {
   type PdfDocument,
 } from 'normativepdf';
 
+/**
+ * 参照の解決の結果。**「そこに無い」と「読めなかった」を分ける。**
+ *
+ * - `value` が `null` オブジェクト — 指し先が存在しない。R-7.3.10-13 が
+ *   「未定義の間接参照は null と等価」と定めており、これは**観測できた事実**である
+ * - `unreadable` — 指し先はあるが条文違反で受け取れなかった。これは**観測の失敗**で、
+ *   ファイルについて何も言えない
+ *
+ * この 2 つを同じ `undefined` に畳むと、「フォントプログラムが埋め込まれていない」と
+ * 「フォントプログラムを読めなかった」が同じ顔になる（2026-08-28 に一度そうして、
+ * `CT-FONT-5` が唯一 fail していた検体を not_applicable に落とした）。
+ */
+export interface Lookup {
+  readonly value: CosObject | undefined;
+  readonly unreadable: boolean;
+}
+
+/** 参照なら解決する。読めなかったのか、そこに無いのかを区別して返す */
+export async function tryLookup(doc: PdfDocument, value: CosObject | undefined): Promise<Lookup> {
+  if (value === undefined) return { value: undefined, unreadable: false };
+  try {
+    return { value: await doc.resolve(value), unreadable: false };
+  } catch {
+    return { value: undefined, unreadable: true };
+  }
+}
+
 /** 参照なら解決する。`undefined` はそのまま返す（鍵が無い場合と区別しない） */
 export async function lookup(
   doc: PdfDocument,
   value: CosObject | undefined,
 ): Promise<CosObject | undefined> {
-  if (value === undefined) return undefined;
-  try {
-    return await doc.resolve(value);
-  } catch {
-    // 読めない参照は「観測できなかった」= undefined。false に倒すと冤罪になる
-    return undefined;
-  }
+  return (await tryLookup(doc, value)).value;
 }
 
 export function asDict(value: CosObject | undefined): CosDict | null {

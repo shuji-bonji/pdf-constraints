@@ -15,7 +15,7 @@
   },
   "issue": "https://github.com/shuji-bonji/pdf-spec-mcp/issues/12",
   "factVocabulary": {
-    "descriptor.fontFileKey": "FontDescriptor が持つ埋め込みキー（FontFile / FontFile2 / FontFile3 / none）。参照はあるのにストリームを取れなかった・復号できなかったときは unreadable = 観測できなかった。この値では埋め込みを見る制約はどれも when を満たさず not_applicable に落ちる（読めなかったことを違反として報告しないため）",
+    "descriptor.fontFileKey": "FontDescriptor が持つ埋め込みキー（FontFile / FontFile2 / FontFile3 / none）。指し先はあるのに条文違反で受け取れなかった・復号できなかったときは unreadable = 観測できなかった（指し先が存在しない場合は unreadable ではない —— それは観測できた事実なので判定を続ける）。この値では埋め込みを見る制約はどれも when を満たさず not_applicable に落ちる（読めなかったことを違反として報告しないため）",
     "stream.dict.Subtype": "フォントストリーム辞書の /Subtype（name）",
     "stream.dict.Length1": "フォントストリーム辞書の /Length1（integer | absent）",
     "stream.decodedLength": "フィルタ復号後のフォントプログラムのバイト長",
