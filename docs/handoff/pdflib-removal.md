@@ -252,6 +252,45 @@ L1 で入れた変更（2026-08-28）:
 1 と 3 は**是正**（条文が正）。2 は言語エスケープ列を持つ検体があれば出る。
 **どれも「予測」であって、出なかったら出なかったことを書く。**
 
+##### 実測（2026-08-28）— **3 つとも出なかった。理由は検体側にある**
+
+`npm test` 38 件・`npm run check`・`npm run build` は通り、
+`diff .golden/before.json .golden/after-L1.json` は **差 0 件**（受入は満たす）。
+予測が 1 つも出なかったので、**判定ではなく事実の側を測り直した**（使い捨ての probe。
+`pdf-lib` の `decodeText()` と normativepdf の `decodeTextString()` を突き合わせる）:
+
+| 測ったもの | 件数 |
+|---|---|
+| この消費者が読むテキスト文字列（Info の日付 + 注釈の `/Contents` `/T` `/Subj` `/RC` `/NM` `/DA`） | **1,470 件** |
+| うち UTF-8 BOM 付き | **0 件** |
+| うち UTF-16BE BOM 付き | 30 件（**言語エスケープ列を含むものは 0 件**） |
+| 2 実装の復号結果が違うもの | **0 件** |
+| Info の日付（旧の正規表現と normativepdf の比較） | 964 件中 **962 件が同値・2 件は両方 null・差 0 件** |
+| コーパス全体の文字列（間接オブジェクトを全走査。この消費者が読まないものも含む） | **29,344 件**・UTF-8 BOM **0 件**・UTF-16BE BOM 291 件・復号の差 **0 件** |
+
+🔴 **原因は検体の集合。** normativepdf の差分オラクルが「UTF-8 BOM で 6 件差」と測ったのは
+`corpus/` **全体**で、その 6 件は `corpus/pdf20examples/`（7 件・PDF 2.0 の例）側にある。
+L0 で採ったゴールデンは `--set fixtures --set ../normativepdf/corpus/veraPDF-corpus` だけで、
+**`pdf20examples/` と `_wout/` を入れていなかった** —— つまり
+**この変更が動かすと予測した軸そのものが検体に無かった**（[[fixtures-produce-only-one-shape]] の
+コーパス版）。`pdf20examples/` には `PDF 2.0 UTF-8 string and annotation.pdf` /
+`pdf20-utf8-test.pdf` / `PDF 2.0 with offset start.pdf` が入っている。
+
+**以後、検体の集合はこの 4 つで固定する**（L0 のゴールデンも採り直す）:
+
+```bash
+node scripts/golden.mjs take .golden/before-full.json --label before-full \
+  --set fixtures \
+  --set ../normativepdf/corpus/veraPDF-corpus \
+  --set ../normativepdf/corpus/pdf20examples \
+  --set ../normativepdf/corpus/_wout
+```
+
+**もう 1 つ、ゴールデンの性質として記録しておく**: ゴールデンは**判定**を凍結する。
+`pass` の行は状態しか持たないので、**判定を動かさない事実の変化は写らない**。
+「差 0 件」は「判定が変わらなかった」であって「何も変わらなかった」ではない。
+事実の側を測るには、上のような probe を別に当てる。
+
 ### L2. `src/check.ts` の入口を `parsePdf` へ
 
 `PDFDocument.load(bytes, { updateMetadata: false })` → `parsePdf(bytes)`。
