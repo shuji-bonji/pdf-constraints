@@ -242,6 +242,14 @@ function diff(before, after) {
     lines.push(`  🔴 given が違う（${before.givenSha} -> ${after.givenSha}）。比較は成立しない`);
     return { lines, regressions: 1, attributable: 0, transitions };
   }
+  // 検体の集合そのものを申告する。同じ set / 同じ件数でなければ、差が 0 でも意味が違う
+  lines.push('# 検体の集合');
+  lines.push(`  before: ${before.specimenCount} 件  ${(before.sets ?? []).join(' , ')}`);
+  lines.push(`  after : ${after.specimenCount} 件  ${(after.sets ?? []).join(' , ')}`);
+  if (stable(before.sets ?? []) !== stable(after.sets ?? [])) {
+    lines.push('  🔴 --set が違う。同じ検体で採り直すこと');
+    regressions += 1;
+  }
 
   const bKeys = Object.keys(before.specimens);
   const aKeys = new Set(Object.keys(after.specimens));
@@ -443,6 +451,42 @@ function t3(golden) {
 
 /* ---------------- CLI ---------------- */
 
+/** 値を取るフラグ。**ここに無いものを渡したら止まる**（黙って捨てない）。 */
+const VALUE_FLAGS = new Set(['--set', '--label', '--given', '--limit', '--detail']);
+
+/**
+ * 宣言に無い引数を拒否する。
+ *
+ * 出自: 2026-08-28、`SETS="--set a --set b"` を `$SETS` で渡したところ、
+ * **zsh は引用符なしの変数展開を単語分割しない**ので 1 個の引数として届き、
+ * `--set` が 0 個と見なされて既定（fixtures だけ）で採ってしまった。
+ * 14 件のゴールデンが「採れた」顔で出た。捨てたことを言わない計器は、
+ * 測っていないことを測ったように見せる（zod 3 の strip と同じ形）。
+ */
+function assertKnownArgs(rest, positional) {
+  for (let i = positional; i < rest.length; i += 1) {
+    const a = rest[i];
+    if (VALUE_FLAGS.has(a)) {
+      if (rest[i + 1] === undefined) {
+        console.error(`${a} に値がありません`);
+        process.exit(2);
+      }
+      i += 1;
+      continue;
+    }
+    if (a.includes('--set') || a.includes('--label') || a.includes('--given')) {
+      console.error(
+        `1 個の引数の中にフラグが埋まっています: ${JSON.stringify(a)}\n` +
+          '  zsh は引用符なしの変数展開を単語分割しません。\n' +
+          '  フラグは直接書くか、zsh なら ${=SETS} で分割してください。',
+      );
+      process.exit(2);
+    }
+    console.error(`知らない引数です: ${JSON.stringify(a)}`);
+    process.exit(2);
+  }
+}
+
 function argValues(rest, flag) {
   const out = [];
   rest.forEach((a, i) => {
@@ -463,7 +507,11 @@ if (mode === 'take') {
     console.error('usage: golden.mjs take <out.json> [--set <dir>]... [--label NAME] [--given <given.json>] [--limit N]');
     process.exit(2);
   }
+  assertKnownArgs(rest, 1);
   const sets = argValues(rest, '--set');
+  if (sets.length === 0) {
+    console.log('⚠ --set が無いので fixtures/ だけを採る（軸が足りないはず）');
+  }
   const golden = await take({
     sets: sets.length ? sets : [join(ROOT, 'fixtures')],
     label: argValue(rest, '--label', 'before'),
@@ -488,6 +536,7 @@ if (mode === 'take') {
     console.error('usage: golden.mjs diff <before.json> <after.json> [--detail <file-key>]');
     process.exit(2);
   }
+  assertKnownArgs(rest, 2);
   const before = JSON.parse(readFileSync(resolve(beforePath), 'utf8'));
   const after = JSON.parse(readFileSync(resolve(afterPath), 'utf8'));
   const r = diff(before, after);
