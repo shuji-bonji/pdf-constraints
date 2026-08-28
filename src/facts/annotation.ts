@@ -10,20 +10,9 @@
  * 観測できなかったものは `null`（= 未取得）にする。false に倒すと冤罪になる。
  */
 
-import { decodeTextString } from 'normativepdf';
-import {
-  PDFArray,
-  PDFDict,
-  type PDFDocument,
-  PDFHexString,
-  PDFName,
-  PDFNumber,
-  PDFRef,
-  PDFString,
-} from 'pdf-lib';
+import { type CosDict, type CosRef, dictGet, type PdfDocument, readPageTree } from 'normativepdf';
 import type { Facts, Subject } from '../types.js';
-
-type Context = PDFDocument['context'];
+import { asArray, asDict, asRef, has, lookup, nameOf, numbersOf, refKey, textOf } from './cos.js';
 
 /**
  * markup 注釈の subtype（§12.5.6.2 本文の列挙）。
@@ -79,48 +68,6 @@ const STANDARD_BLEND_MODES = new Set([
   'Luminosity',
 ]);
 
-function lookup(context: Context, value: unknown): unknown {
-  if (value === undefined || value === null) return undefined;
-  try {
-    return context.lookup(value as Parameters<Context['lookup']>[0]);
-  } catch {
-    return undefined;
-  }
-}
-
-function nameOf(value: unknown): string | null {
-  return value instanceof PDFName ? value.decodeText() : null;
-}
-
-/** 数値配列。要素に数値以外が混じっていたら「読めなかった」= null にする */
-function numbersOf(context: Context, value: unknown): number[] | null {
-  const array = lookup(context, value);
-  if (!(array instanceof PDFArray)) return null;
-  const out: number[] = [];
-  for (let i = 0; i < array.size(); i += 1) {
-    const element = lookup(context, array.get(i));
-    if (!(element instanceof PDFNumber)) return null;
-    out.push(element.asNumber());
-  }
-  return out;
-}
-
-/**
- * テキスト文字列（§7.9.2）。**どの文字列がテキスト文字列かは、辞書のキーが決める**
- * （R-7.9.2.1-1）。ここに来る値はそのキーの下にあるものだけである。
- *
- * 復号は normativepdf の `decodeTextString` に任せる。pdf-lib の `decodeText()` は
- * UTF-16BE と PDFDocEncoding しか見ず、**UTF-8 の BOM（R-7.9.2.2.1-4・PDF 2.0）を
- * 扱わない**し、言語エスケープ列（§7.9.2.2.2）も取り除かない。
- * 語彙は同じ Table D.3 から起こしてあるので、その 2 つ以外では同じ値になる。
- */
-function textOf(value: unknown): string | null {
-  if (value instanceof PDFHexString || value instanceof PDFString) {
-    return decodeTextString(Uint8Array.from(value.asBytes()));
-  }
-  return null;
-}
-
 function orientation(p: number[], a: number, b: number, c: number): number {
   const cross =
     (p[2 * b] - p[2 * a]) * (p[2 * c + 1] - p[2 * a + 1]) -
@@ -169,47 +116,57 @@ function quadPointsWinding(values: number[]): 'ccw' | 'cw' | 'nonSimple' | 'mixe
 }
 
 /** `/AP` の値が「外観サブ辞書」を含むか（= `/AS` が要る形か。Table 166 AS） */
-function apHasSubdictionary(context: Context, ap: PDFDict): boolean {
+async function apHasSubdictionary(doc: PdfDocument, ap: CosDict): Promise<boolean> {
   // AP の各エントリ（N / R / D）は「外観ストリーム」か「状態名 → ストリームの辞書」。
-  // pdf-lib ではストリームは PDFDict のインスタンスではないので、辞書ならサブ辞書と判る。
-  return ap.entries().some(([, value]) => lookup(context, value) instanceof PDFDict);
+  // ストリームは kind: 'stream' なので、kind: 'dict' ならサブ辞書と判る。
+  for (const [, value] of ap.entries) {
+    if (asDict(await lookup(doc, value)) !== null) return true;
+  }
+  return false;
 }
 
 interface PageAnnots {
   pageIndex: number;
   /** Annots に並んでいた参照（直接オブジェクトなら null） */
-  refs: (PDFRef | null)[];
-  dicts: PDFDict[];
+  refs: (CosRef | null)[];
+  dicts: CosDict[];
 }
 
-function collectPages(doc: PDFDocument): PageAnnots[] {
-  const context = doc.context;
-  return doc.getPages().map((page, pageIndex) => {
-    const annots = lookup(context, page.node.get(PDFName.of('Annots')));
-    const refs: (PDFRef | null)[] = [];
-    const dicts: PDFDict[] = [];
-    if (annots instanceof PDFArray) {
-      for (let i = 0; i < annots.size(); i += 1) {
-        const raw = annots.get(i);
-        const resolved = lookup(context, raw);
-        if (!(resolved instanceof PDFDict)) continue;
-        refs.push(raw instanceof PDFRef ? raw : null);
+async function collectPages(doc: PdfDocument): Promise<PageAnnots[]> {
+  const tree = await readPageTree({
+    resolve: (value) => doc.resolve(value),
+    getCatalog: () => doc.getCatalog(),
+  });
+  const out: PageAnnots[] = [];
+  for (const page of tree.pages) {
+    const annots = asArray(await lookup(doc, dictGet(page.dict, 'Annots')));
+    const refs: (CosRef | null)[] = [];
+    const dicts: CosDict[] = [];
+    if (annots !== null) {
+      for (const raw of annots.items) {
+        const resolved = asDict(await lookup(doc, raw));
+        if (resolved === null) continue;
+        refs.push(asRef(raw));
         dicts.push(resolved);
       }
     }
-    return { pageIndex, refs, dicts };
-  });
+    out.push({ pageIndex: page.index, refs, dicts });
+  }
+  return out;
 }
 
-export function extractAnnotationFacts(doc: PDFDocument, given: Facts): Subject[] {
-  const context = doc.context;
-  const pages = collectPages(doc);
+export async function extractAnnotationFacts(
+  doc: PdfDocument,
+  given: Facts,
+): Promise<Subject[]> {
+  const pages = await collectPages(doc);
 
   // R-12.5.2-2: 同じ注釈辞書が複数ページの Annots から参照されていないか
   const pagesPerRef = new Map<string, number>();
   for (const page of pages) {
-    for (const ref of new Set(page.refs.filter((r): r is PDFRef => r !== null))) {
-      const key = ref.toString();
+    for (const key of new Set(
+      page.refs.filter((r): r is CosRef => r !== null).map((r) => refKey(r)),
+    )) {
       pagesPerRef.set(key, (pagesPerRef.get(key) ?? 0) + 1);
     }
   }
@@ -220,47 +177,51 @@ export function extractAnnotationFacts(doc: PDFDocument, given: Facts): Subject[
     // R-12.5.6.2-9 の判定材料: このページで /Popup から指されている参照
     const popupTargets = new Set<string>();
     for (const dict of page.dicts) {
-      const popup = dict.get(PDFName.of('Popup'));
-      if (popup instanceof PDFRef) popupTargets.add(popup.toString());
+      const popup = asRef(dictGet(dict, 'Popup'));
+      if (popup !== null) popupTargets.add(refKey(popup));
     }
     const refKeysOnPage = new Set(
-      page.refs.filter((r): r is PDFRef => r !== null).map((r) => r.toString()),
+      page.refs.filter((r): r is CosRef => r !== null).map((r) => refKey(r)),
     );
     const nmCounts = new Map<string, number>();
     for (const dict of page.dicts) {
-      const nm = textOf(dict.get(PDFName.of('NM')));
+      const nm = textOf(dictGet(dict, 'NM'));
       if (nm !== null) nmCounts.set(nm, (nmCounts.get(nm) ?? 0) + 1);
     }
 
-    page.dicts.forEach((dict, index) => {
+    for (const [index, dict] of page.dicts.entries()) {
       const ref = page.refs[index];
-      const subtype = nameOf(dict.get(PDFName.of('Subtype')));
-      const rect = numbersOf(context, dict.get(PDFName.of('Rect')));
-      const contents = textOf(dict.get(PDFName.of('Contents')));
-      const colour = numbersOf(context, dict.get(PDFName.of('C')));
-      const quadPoints = numbersOf(context, dict.get(PDFName.of('QuadPoints')));
-      const flags = lookup(context, dict.get(PDFName.of('F')));
-      const ap = lookup(context, dict.get(PDFName.of('AP')));
-      const irt = dict.get(PDFName.of('IRT'));
-      const nm = textOf(dict.get(PDFName.of('NM')));
-      const action = lookup(context, dict.get(PDFName.of('A')));
+      const subtype = nameOf(dictGet(dict, 'Subtype'));
+      const rect = await numbersOf(doc, dictGet(dict, 'Rect'));
+      const contents = textOf(dictGet(dict, 'Contents'));
+      const colour = await numbersOf(doc, dictGet(dict, 'C'));
+      const quadPoints = await numbersOf(doc, dictGet(dict, 'QuadPoints'));
+      const flags = await lookup(doc, dictGet(dict, 'F'));
+      const ap = asDict(await lookup(doc, dictGet(dict, 'AP')));
+      const irt = asRef(dictGet(dict, 'IRT'));
+      const nm = textOf(dictGet(dict, 'NM'));
+      const action = asDict(await lookup(doc, dictGet(dict, 'A')));
+      const flagsValue =
+        flags !== undefined && (flags.kind === 'integer' || flags.kind === 'real')
+          ? flags.value
+          : null;
       const quadPointsWellFormed =
         quadPoints !== null && quadPoints.length > 0 && quadPoints.length % 8 === 0;
 
       const facts: Facts = {
         'annot.subtype': subtype,
         'annot.hasSubtype': subtype !== null,
-        'annot.hasType': dict.has(PDFName.of('Type')),
-        'annot.typeValue': nameOf(dict.get(PDFName.of('Type'))),
+        'annot.hasType': has(dict, 'Type'),
+        'annot.typeValue': nameOf(dictGet(dict, 'Type')),
 
         'annot.hasRect': rect !== null && rect.length === 4,
         // Table 166 AP 例外①（2020 年に "or" から "and" へ改められた側の読み）
         'annot.rect.isDegenerate':
           rect !== null && rect.length === 4 ? rect[0] === rect[2] && rect[1] === rect[3] : null,
 
-        'annot.hasAP': ap instanceof PDFDict,
-        'annot.ap.hasSubdictionary': ap instanceof PDFDict ? apHasSubdictionary(context, ap) : null,
-        'annot.hasAS': dict.has(PDFName.of('AS')),
+        'annot.hasAP': ap !== null,
+        'annot.ap.hasSubdictionary': ap !== null ? await apHasSubdictionary(doc, ap) : null,
+        'annot.hasAS': has(dict, 'AS'),
         'annot.isApExemptSubtype': subtype !== null && AP_EXEMPT_SUBTYPES.has(subtype),
 
         'annot.isMarkup': subtype !== null && MARKUP_SUBTYPES.has(subtype),
@@ -273,35 +234,33 @@ export function extractAnnotationFacts(doc: PDFDocument, given: Facts): Subject[
         'annot.C.length': colour === null ? null : colour.length,
         'annot.C.allInUnitRange': colour === null ? null : colour.every((v) => v >= 0 && v <= 1),
 
-        'annot.hasBM': dict.has(PDFName.of('BM')),
-        'annot.BM.isStandard': dict.has(PDFName.of('BM'))
-          ? STANDARD_BLEND_MODES.has(nameOf(dict.get(PDFName.of('BM'))) ?? '')
+        'annot.hasBM': has(dict, 'BM'),
+        'annot.BM.isStandard': has(dict, 'BM')
+          ? STANDARD_BLEND_MODES.has(nameOf(dictGet(dict, 'BM')) ?? '')
           : null,
 
-        'annot.hasFlags': flags instanceof PDFNumber,
+        'annot.hasFlags': flagsValue !== null,
         'annot.flags.hasUndefinedBits':
-          flags instanceof PDFNumber ? (flags.asNumber() & ~DEFINED_FLAG_MASK) !== 0 : null,
+          flagsValue !== null ? (flagsValue & ~DEFINED_FLAG_MASK) !== 0 : null,
 
         'annot.hasQuadPoints': quadPoints !== null,
         'annot.quadPoints.isMultipleOf8': quadPoints === null ? null : quadPointsWellFormed,
         'annot.quadPoints.winding': quadPointsWellFormed ? quadPointsWinding(quadPoints) : null,
 
-        'annot.popup.isReferenced': ref === null ? null : popupTargets.has(ref.toString()),
+        'annot.popup.isReferenced': ref === null ? null : popupTargets.has(refKey(ref)),
 
-        'annot.hasRT': dict.has(PDFName.of('RT')),
-        'annot.hasIRT': dict.has(PDFName.of('IRT')),
-        'annot.irt.samePage': irt instanceof PDFRef ? refKeysOnPage.has(irt.toString()) : null,
+        'annot.hasRT': has(dict, 'RT'),
+        'annot.hasIRT': has(dict, 'IRT'),
+        'annot.irt.samePage': irt !== null ? refKeysOnPage.has(refKey(irt)) : null,
 
         'annot.hasNM': nm !== null,
         'annot.nm.duplicatedOnPage': nm === null ? null : (nmCounts.get(nm) ?? 0) > 1,
 
-        'annot.hasP': dict.has(PDFName.of('P')),
+        'annot.hasP': has(dict, 'P'),
         'annot.isScreenWithRendition':
-          subtype === 'Screen' &&
-          action instanceof PDFDict &&
-          nameOf(action.get(PDFName.of('S'))) === 'Rendition',
+          subtype === 'Screen' && action !== null && nameOf(dictGet(action, 'S')) === 'Rendition',
 
-        'annot.referencedByPageCount': ref === null ? 1 : (pagesPerRef.get(ref.toString()) ?? 1),
+        'annot.referencedByPageCount': ref === null ? 1 : (pagesPerRef.get(refKey(ref)) ?? 1),
 
         ...given,
       };
@@ -311,7 +270,7 @@ export function extractAnnotationFacts(doc: PDFDocument, given: Facts): Subject[
         scope: 'annotation',
         facts,
       });
-    });
+    }
   }
 
   return subjects;

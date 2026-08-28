@@ -330,16 +330,45 @@ pdf-lib は `R-7.9.2.2.1-4` を実装していないので、この 3 バイト�
 **出なかった**。probe の数字（UTF-16BE 291 件中、言語エスケープ列 0 件／日付 964 件中、
 旧実装との差 0 件）と整合する。
 
-### L2. `src/check.ts` の入口を `parsePdf` へ
+### L2 + L3. 入口と抽出器 3 本（**分けられない**・2026-08-28 実施）
 
-`PDFDocument.load(bytes, { updateMetadata: false })` → `parsePdf(bytes)`。
-`updateMetadata: false` は pdf-lib が Info を書き換えないようにするための引数で、
-normativepdf は読むだけなので不要になる。
+🔴 **L2 と L3 は切り離せなかった。** `check.ts` の入口を替えると、そこから流れる `doc` の型が
+`collectSubjects` と抽出器 3 本すべてに当たる。入口だけを替えて抽出器を pdf-lib のままにするには
+同じファイルを 2 つのパーサで読むしかなく、それは測る対象を 2 つにする。まとめて実施した。
 
-### L3. 抽出器 3 本（28 lookup・async 化）
+入れたもの:
 
-`document` → `embedded-font` → `annotation` の順（lookup が少ない順）。
-各段で L0 のゴールデンと A/B を取る。
+- `src/check.ts`: `PDFDocument.load(bytes, { updateMetadata: false })` → **`await parsePdf(bytes)`**。
+  `updateMetadata: false` は pdf-lib が Info を書き換えないための引数で、読むだけなら要らない
+- **`src/facts/cos.ts` を新設**（120 行）。`instanceof` と `context.lookup` に相当するものを
+  `kind` の見分けと `await doc.resolve` の上に置き直した共通部分。ここに判定は書かない
+- 抽出器 3 本と `collectSubjects` を **async 化**（`resolve` / `getObject` が async なため。
+  圧縮オブジェクトはフィルタ付きのオブジェクトストリームの中にある）
+- `enumerateIndirectObjects()` → `doc.xref` を歩いて `getObject`。**読めない 1 件で文書全体を
+  落とさない**（try/catch で飛ばす）
+- `doc.getPages()` → `readPageTree`（継承の解決つき・§7.7.3.4）
+- `decodePDFRawStream(stream).decode()` → `decodeStream`。`/Filter` と `/DecodeParms` が
+  間接参照のときは**先に解決してから**渡す（`decodeStream` の解決口は同期のため）
+- **`src/` から `from 'pdf-lib'` が 0 件になった**（`package.json` の依存は L4 で落とす）
+
+**波及は `checkBytes` で止まった**（§4 の予測どおり）。公開 API の形は変わらない。
+
+#### 予測される A/B の差（L2+L3）
+
+1. **暗号化 4 検体が「読めなかった → 読めた」になる。** normativepdf は材料化の時点で
+   復号する。**新しく生まれた行が `fail` でも後退ではない**（判定が生まれただけ）
+2. **壊れた xref の検体が「読めた → 読めない」に落ちうる。** §7.5.4 を条文どおり厳格に読み、
+   回復方針は消費者側に置く設計（normativepdf `DESIGN.md` §4.2）。verify の `revision-diff.ts`
+   移行では 2,987 件中 6 件が該当した。**計器はこれを受入違反の側に数える**ので、
+   出たら 1 件ずつ「読めなくなったのは条文どおりか」を書いて帰属させる
+3. **`has()` が null 等価規則を適用する。** `dictGet` は「値が null のエントリは無いのと同じ」
+   （R-7.3.7-7）を適用する。pdf-lib の `dict.has()` は鍵の有無しか見ない。
+   `annot.hasType` / `hasAS` / `hasBM` / `hasRT` / `hasIRT` / `hasP` が動きうる
+4. **名前の 4 か所が `CosName.value` になる。** `#xx` の解決と UTF-8 の復号は字句解析が
+   済ませている（R-7.3.5-13）。`#`-エスケープを含む名前で差が出る
+5. **Info の日付が間接参照で書かれている場合、`null` になる。** 以前は pdf-lib の
+   `PDFRef` が文字列化されて `"1 0 R"` が fact に入っていた（それも日付ではないので
+   `CT-META-3` は fail のまま。判定は動かない見込み）
 
 ### L4. `registry.ts` の型を差し替え、`package.json` から pdf-lib を落とす
 

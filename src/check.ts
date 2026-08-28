@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PDFDocument } from 'pdf-lib';
+import { parsePdf } from 'normativepdf';
 import { evaluateConstraint, evaluateDocumentAsserts } from './evaluate.js';
 import { collectSubjects } from './facts/registry.js';
 import type { CheckReport, ConstraintTable, Facts, Scope } from './types.js';
@@ -48,9 +48,11 @@ export async function checkBytes(
     Object.entries(options.given ?? {}).map(([key, value]) => [`given.${key}`, value]),
   );
 
-  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  // `updateMetadata: false` は pdf-lib が Info を書き換えないようにするための引数だった。
+  // normativepdf は読むだけなので要らない。暗号化文書は材料化の時点で復号される（§7.6）。
+  const doc = await parsePdf(bytes);
   const scopes: Scope[] = tables.flatMap((t) => t.constraints.map((c) => c.appliesTo));
-  const subjectsByScope = collectSubjects(doc, scopes, given);
+  const subjectsByScope = await collectSubjects(doc, scopes, given);
 
   const report: CheckReport = {
     packageVersion,

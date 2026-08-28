@@ -6,41 +6,11 @@
  * ここでの検査は近似である — テーブル側の `notMapped` にその旨を書いてある。
  */
 
-import { decodeTextString } from 'normativepdf';
-import { decodePDFRawStream, PDFDict, type PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
+import { dictGet, type PdfDocument } from 'normativepdf';
 import type { Facts, Subject } from '../types.js';
+import { asDict, asStream, decodedBytes, has, lookup, nameOf, textOf } from './cos.js';
 
-function nameValue(dict: PDFDict, key: string): string | undefined {
-  const value = dict.get(PDFName.of(key));
-  return value instanceof PDFName ? value.decodeText() : undefined;
-}
-
-/**
- * Info の日付・文字列は PDFString / PDFHexString のどちらもありうる。
- *
- * 復号は normativepdf の `decodeTextString`（§7.9.2）に任せる。pdf-lib の
- * `decodeText()` は **UTF-8 の BOM（R-7.9.2.2.1-4）を扱わない**ので、
- * `EF BB BF` で始まる `/CreationDate` は PDFDocEncoding として読まれて日付にならない。
- *
- * 分岐の判定を `decodeText` から `asBytes` に変えてある。pdf-lib では PDFName も
- * `decodeText` を持つので、以前は名前オブジェクトもここでテキスト文字列として復号していた。
- * **名前はテキスト文字列ではない**（§7.3.5 と §7.9.2 は別の条項）。
- */
-function stringValue(value: unknown): string | null {
-  if (value === undefined || value === null) return null;
-  const candidate = value as {
-    asBytes?: () => number[] | Uint8Array;
-    asString?: () => string;
-  };
-  if (typeof candidate.asBytes === 'function') {
-    return decodeTextString(Uint8Array.from(candidate.asBytes()));
-  }
-  if (typeof candidate.asString === 'function') return candidate.asString();
-  return String(value).replace(/^\(|\)$/g, '');
-}
-
-export function extractDocumentFacts(doc: PDFDocument, given: Facts): Subject {
-  const context = doc.context;
+export async function extractDocumentFacts(doc: PdfDocument, given: Facts): Promise<Subject> {
   const facts: Facts = {
     'doc.xmp.exists': false,
     'doc.xmp.dict.Type': null,
@@ -54,32 +24,30 @@ export function extractDocumentFacts(doc: PDFDocument, given: Facts): Subject {
     ...given,
   };
 
-  const infoRef = context.trailerInfo?.Info;
-  const info = infoRef ? context.lookup(infoRef) : undefined;
-  if (info instanceof PDFDict) {
-    facts['doc.info.CreationDate'] = stringValue(info.get(PDFName.of('CreationDate')));
-    facts['doc.info.ModDate'] = stringValue(info.get(PDFName.of('ModDate')));
-    const trapped = info.get(PDFName.of('Trapped'));
+  const info = asDict(await lookup(doc, dictGet(doc.trailer, 'Info')));
+  if (info !== null) {
+    facts['doc.info.CreationDate'] = textOf(dictGet(info, 'CreationDate'));
+    facts['doc.info.ModDate'] = textOf(dictGet(info, 'ModDate'));
+    const trapped = dictGet(info, 'Trapped');
     if (trapped !== undefined) {
       // R-14.3.3-5/-6: name の True / False であって boolean ではない
       facts['doc.info.TrappedKind'] =
-        trapped instanceof PDFName
-          ? `name:${trapped.decodeText()}`
-          : trapped.constructor?.name === 'PDFBool'
+        trapped.kind === 'name'
+          ? `name:${trapped.value}`
+          : trapped.kind === 'boolean'
             ? 'boolean'
             : 'other';
     }
   }
 
-  const metadata = context.lookup(doc.catalog.get(PDFName.of('Metadata')));
-  if (metadata instanceof PDFRawStream) {
+  const catalog = asDict(await doc.getCatalog().catch(() => undefined));
+  const metadata = catalog === null ? null : asStream(await lookup(doc, dictGet(catalog, 'Metadata')));
+  if (metadata !== null) {
     facts['doc.xmp.exists'] = true;
-    facts['doc.xmp.dict.Type'] = nameValue(metadata.dict, 'Type') ?? null;
-    facts['doc.xmp.dict.Subtype'] = nameValue(metadata.dict, 'Subtype') ?? null;
+    facts['doc.xmp.dict.Type'] = nameOf(dictGet(metadata.dict, 'Type'));
+    facts['doc.xmp.dict.Subtype'] = nameOf(dictGet(metadata.dict, 'Subtype'));
     try {
-      const bytes = metadata.dict.has(PDFName.of('Filter'))
-        ? decodePDFRawStream(metadata).decode()
-        : metadata.contents;
+      const bytes = has(metadata.dict, 'Filter') ? await decodedBytes(doc, metadata) : metadata.raw;
       const text = new TextDecoder().decode(bytes);
       facts['doc.xmp.hasXmpEnvelope'] =
         /<\?xpacket begin=/.test(text) && /<x:xmpmeta[\s>]/.test(text);

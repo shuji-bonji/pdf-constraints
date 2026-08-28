@@ -1,21 +1,14 @@
 /**
  * scope `embedded-font` の fact 抽出。
  *
- * **フォント辞書は委譲先が書いたものを自分の目で開く。** pdf-lib は自分が書いた辞書を
- * そのまま読み返すので、「CFF なのに FontFile2 と名乗っている」は pdf-lib の API 越しには
- * 見えない。ここではストリームを復号して **sfnt のテーブルディレクトリを直接読む**。
+ * **フォント辞書は委譲先が書いたものを自分の目で開く。** 高水準 API は自分が書いた辞書を
+ * そのまま読み返すので、「CFF なのに FontFile2 と名乗っている」は API 越しには見えない。
+ * ここではストリームを復号して **sfnt のテーブルディレクトリを直接読む**。
  */
 
-import {
-  decodePDFRawStream,
-  PDFDict,
-  type PDFDocument,
-  PDFName,
-  PDFNumber,
-  PDFRawStream,
-  PDFRef,
-} from 'pdf-lib';
+import { type CosObject, dictGet, type PdfDocument } from 'normativepdf';
 import type { Facts, Subject } from '../types.js';
+import { asDict, asRef, asStream, decodedBytes, lookup, nameOf, numberOf } from './cos.js';
 
 /** sfnt / bare CFF のコンテナ種別とテーブル一覧を、復号後のバイト列から読む */
 function inspectProgram(bytes: Uint8Array): { container: string; tables: string[] } {
@@ -40,49 +33,74 @@ function inspectProgram(bytes: Uint8Array): { container: string; tables: string[
   return { container, tables };
 }
 
-function nameValue(dict: PDFDict, key: string): string | undefined {
-  const value = dict.get(PDFName.of(key));
-  return value instanceof PDFName ? value.decodeText() : undefined;
+interface Indirect {
+  readonly key: string;
+  readonly generation: number;
+  readonly objectNumber: number;
+  readonly object: CosObject;
+}
+
+/**
+ * 間接オブジェクトを 1 つずつ読む。
+ *
+ * pdf-lib の `enumerateIndirectObjects()` に相当する。相互参照表に載っているものが
+ * 全部で、**読めなかったものは飛ばす**（壊れた 1 件で文書全体を落とさない）。
+ */
+async function* indirectObjects(doc: PdfDocument): AsyncGenerator<Indirect> {
+  for (const [objectNumber, entry] of doc.xref) {
+    if (entry.type !== 'in-use' && entry.type !== 'compressed') continue;
+    const generation = entry.type === 'in-use' ? entry.generation : 0;
+    let object: CosObject;
+    try {
+      object = await doc.getObject(objectNumber, generation);
+    } catch {
+      continue;
+    }
+    yield { key: `${objectNumber} ${generation} R`, generation, objectNumber, object };
+  }
 }
 
 /**
  * 文書中の埋め込みフォントを 1 つずつ subject にする。
  * FontDescriptor を軸に、参照元のフォント辞書（/Subtype・/BaseFont）を逆引きする。
  */
-export function extractEmbeddedFontFacts(doc: PDFDocument, given: Facts): Subject[] {
-  const context = doc.context;
+export async function extractEmbeddedFontFacts(
+  doc: PdfDocument,
+  given: Facts,
+): Promise<Subject[]> {
   const fontByDescriptor = new Map<string, { subtype?: string; baseFont?: string }>();
 
-  for (const [, object] of context.enumerateIndirectObjects()) {
-    if (!(object instanceof PDFDict)) continue;
-    if (nameValue(object, 'Type') !== 'Font') continue;
-    const descriptor = object.get(PDFName.of('FontDescriptor'));
-    if (descriptor instanceof PDFRef) {
-      fontByDescriptor.set(descriptor.toString(), {
-        subtype: nameValue(object, 'Subtype'),
-        baseFont: nameValue(object, 'BaseFont'),
+  for await (const { object } of indirectObjects(doc)) {
+    const dict = asDict(object);
+    if (dict === null || nameOf(dictGet(dict, 'Type')) !== 'Font') continue;
+    const descriptor = asRef(dictGet(dict, 'FontDescriptor'));
+    if (descriptor !== null) {
+      fontByDescriptor.set(`${descriptor.objectNumber} ${descriptor.generationNumber} R`, {
+        subtype: nameOf(dictGet(dict, 'Subtype')) ?? undefined,
+        baseFont: nameOf(dictGet(dict, 'BaseFont')) ?? undefined,
       });
     }
   }
 
   const subjects: Subject[] = [];
-  for (const [ref, object] of context.enumerateIndirectObjects()) {
-    if (!(object instanceof PDFDict)) continue;
-    if (nameValue(object, 'Type') !== 'FontDescriptor') continue;
+  for await (const { key, object } of indirectObjects(doc)) {
+    const dict = asDict(object);
+    if (dict === null || nameOf(dictGet(dict, 'Type')) !== 'FontDescriptor') continue;
 
-    const font = fontByDescriptor.get(ref.toString()) ?? {};
+    const font = fontByDescriptor.get(key) ?? {};
     let fontFileKey = 'none';
-    let streamRef: unknown;
-    for (const key of ['FontFile', 'FontFile2', 'FontFile3']) {
-      if (object.has(PDFName.of(key))) {
-        fontFileKey = key;
-        streamRef = object.get(PDFName.of(key));
+    let streamValue: CosObject | undefined;
+    for (const name of ['FontFile', 'FontFile2', 'FontFile3']) {
+      const value = dictGet(dict, name);
+      if (value !== undefined) {
+        fontFileKey = name;
+        streamValue = value;
       }
     }
 
     const facts: Facts = {
       'descriptor.fontFileKey': fontFileKey,
-      'descriptor.fontName': nameValue(object, 'FontName') ?? null,
+      'descriptor.fontName': nameOf(dictGet(dict, 'FontName')),
       'font.subtype': font.subtype ?? null,
       'font.baseFont': font.baseFont ?? null,
       'stream.dict.Subtype': null,
@@ -94,14 +112,13 @@ export function extractEmbeddedFontFacts(doc: PDFDocument, given: Facts): Subjec
       ...given,
     };
 
-    if (streamRef !== undefined) {
-      const stream = context.lookup(streamRef as PDFRef);
-      if (stream instanceof PDFRawStream) {
-        facts['stream.dict.Subtype'] = nameValue(stream.dict, 'Subtype') ?? null;
-        const length1 = stream.dict.get(PDFName.of('Length1'));
-        facts['stream.dict.Length1'] = length1 instanceof PDFNumber ? length1.asNumber() : null;
+    if (streamValue !== undefined) {
+      const stream = asStream(await lookup(doc, streamValue));
+      if (stream !== null) {
+        facts['stream.dict.Subtype'] = nameOf(dictGet(stream.dict, 'Subtype'));
+        facts['stream.dict.Length1'] = numberOf(dictGet(stream.dict, 'Length1'));
 
-        const decoded = decodePDFRawStream(stream).decode();
+        const decoded = await decodedBytes(doc, stream);
         facts['stream.decodedLength'] = decoded.length;
         const program = inspectProgram(decoded);
         facts['program.container'] = program.container;
@@ -114,7 +131,7 @@ export function extractEmbeddedFontFacts(doc: PDFDocument, given: Facts): Subjec
     }
 
     subjects.push({
-      label: String(facts['font.baseFont'] ?? ref.toString()),
+      label: String(facts['font.baseFont'] ?? key),
       scope: 'embedded-font',
       facts,
     });
