@@ -158,6 +158,49 @@ normativepdf 側で `npm run corpus:fetch`）を必ず足すこと。150 件で 
 ゴールデンの置き場は `.golden/`（gitignore 済み）。**撤去後に作り直さないこと** —
 作り直すと同じパーサ同士の比較になり、§6 面 3 の第 2 の読み手が消える。
 
+#### 採ったもの（2026-08-28・pdf-lib 1.17.1 / pdf-constraints 0.3.0 / テーブル 3 本とも v1）
+
+`.golden/before.json`（4.3 MB）。**gitignore なので、この数字だけが committed な控えである。**
+
+| | |
+|---|---|
+| 検体 | **2,921 件**（`fixtures` 14 + veraPDF コーパス 2,907） |
+| 読めなかった | **5 件**（下記） |
+| 判定の行 | **31,221 行** |
+| 状態の内訳 | `pass` 14,193 / `not_applicable` 15,461 / `needs_external_fact` 1,362 / **`fail` 205** |
+| fail を 1 件以上持つ検体 | **152 件** |
+| 一度も fail しない制約 | **`CT-FONT-3` の 1 件だけ**（他 25 件は 1 回以上 fail する） |
+
+制約ごとの fail 件数（多い順）: `CT-ANNOT-3` 66 / `CT-ANNOT-9` 28 / `CT-META-2` 25 /
+`CT-FONT-4` 24 / `CT-META-4` 17 / `CT-META-5` 15 / `CT-ANNOT-10` 5 / `CT-FONT-1` 3 /
+以下 1〜2 件が 17 件。
+
+**決定論は実測した。** 同じコードで 2 回全走し、`label` と `takenAt` を除いて
+**2,921 検体すべてが完全に同一**（`diff` で差 0 件）。これがコーパス全体での空振り検査に当たる。
+
+##### 🔴 この 5 件は「撤去後に読めるようになる」ことが予測される
+
+| 検体 | pdf-lib の言い分 |
+|---|---|
+| `Isartor .../6.1.3 File trailer/isartor-6-1-3-t02-fail-a.pdf` | 暗号化されている |
+| `PDF_A-2b/.../veraPDF test suite 6-1-3-t02-fail-a.pdf` | 暗号化されている |
+| `PDF_A-4/.../veraPDF test suite 6-1-3-t02-fail-a.pdf` | 暗号化されている |
+| `PDF_UA-1/7.16 Security/7.16-t01-fail-a.pdf` | 暗号化されている |
+| `PDF_A-1b/.../6.1.2 File header/veraPDF test suite 6-1-2-t01-fail-b.pdf` | `Failed to parse number (line:0 col:5 offset=5)` |
+
+normativepdf 0.9.0 は `parsePdf(bytes, { password })` が材料化の時点で復号する。
+L2 のあと、この 4 件（暗号化）は**「読めなかった → 読めた」**として `diff` に出るはずで、
+これは**是正**として帰属させる（判定が生まれるので `fail` が増えることもある —— §6 面 2 の
+「`fail → pass` にも帰属が要る」の裏返しで、**新しく生まれた行は後退ではない**）。
+残る 1 件はファイルヘッダの検体なので、`origin > 0` の読み方次第で結果が変わる。
+**5 件とも、動かなかったら「なぜ動かなかったか」を書く。** 予測が外れることも観測である。
+
+##### 🔴 ゴールデンの盲点 — `CT-FONT-3`
+
+2,921 件のどれでも fail しない。**この制約が壊れても、A/B は片方向にしか気づけない**
+（`pass → fail` は出るが、`fail → pass` は出しようがない）。L3 で
+`embedded-font` の抽出器を触ったら、`CT-FONT-3` だけは A/B ではなくユニットテストで見る。
+
 ### L1. normativepdf の §7.9 文字列層を消費する
 
 `decodeText()` × 6 を `decodeTextString` に置き換える。**この repo が第 1 消費者**
