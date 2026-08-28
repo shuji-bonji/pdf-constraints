@@ -40,18 +40,10 @@ export function parsePdfDate(value: unknown): number | null {
   if (typeof value !== 'string') return null;
   const parsed = parsePdfDateFields(value);
   if (parsed === null) return null;
-  const signed =
-    parsed.utRelationship === '+' ? 1 : parsed.utRelationship === '-' ? -1 : 0;
+  const signed = parsed.utRelationship === '+' ? 1 : parsed.utRelationship === '-' ? -1 : 0;
   const offsetMinutes = signed * (parsed.offsetHours * 60 + parsed.offsetMinutes);
   return (
-    Date.UTC(
-      parsed.year,
-      parsed.month - 1,
-      parsed.day,
-      parsed.hour,
-      parsed.minute,
-      parsed.second,
-    ) -
+    Date.UTC(parsed.year, parsed.month - 1, parsed.day, parsed.hour, parsed.minute, parsed.second) -
     offsetMinutes * 60_000
   );
 }
