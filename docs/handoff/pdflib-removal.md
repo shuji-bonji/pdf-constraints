@@ -52,6 +52,16 @@ export async function checkFile(path: string, options?: CheckOptions): Promise<C
 verify が使っているのは `checkFile` と `listTables` の 2 つだけ（実測）。
 **pdf-lib はほぼ実装詳細**なので、内部を入れ替えても消費者は変わらない。
 
+### 🔴 例外がもう 1 つ — `parsePdfDate` の戻り値が変わる（2026-08-28 追記）
+
+この repo は `src/evaluate.ts` の `parsePdfDate(value: unknown): number | null` を
+`src/index.ts` から**公開している**。normativepdf の同名関数は `PdfDate | null` を返す別物で、
+L1 で入れ替えると戻り値の型が変わる。**同名だが同じものではない。**
+選べるのは 3 つ: (a) 内部だけ normativepdf に載せ替え、公開する `parsePdfDate` は
+`PdfDate` → epoch ミリ秒の薄い変換として残す / (b) 公開をやめる（未決 1 と同じ扱い） /
+(c) `PdfDate` をそのまま返す形に変える。**(a) を推す** —— `dateEquiv` 述語が数値の比較を
+前提にしていて、そこは変える必要が無いため。
+
 ### 🔴 例外が 1 つ — `PDFDocument` が公開面に漏れている
 
 ```ts
@@ -86,10 +96,78 @@ export function collectSubjects(doc: PDFDocument, scopes: Iterable<Scope>, given
 - 🔴 **計器そのものに T-3 を通してから採る**（[[instrument-must-pass-t3]]）。
   `CheckReport` の 1 項目を書き換えて A/B が差を報告することを先に実測する
 
+#### 計器 — `scripts/golden.mjs`（2026-08-28 に入れた）
+
+```bash
+npm run build                       # dist を読むので先に建てる
+
+# 1. 計器自身の T-3 を先に通す（fixtures から採って壊す。保存しない）
+node scripts/golden.mjs t3
+
+# 2. 撤去前のゴールデンを採る。**fixtures だけでは足りない**（下記の軸）
+node scripts/golden.mjs take .golden/before.json --label before \
+  --set fixtures --set ../normativepdf/corpus/veraPDF-corpus
+
+# 3. 各段（L1〜L4）のあとで採り直して突き合わせる
+node scripts/golden.mjs take .golden/after-L3.json --label after-L3 \
+  --set fixtures --set ../normativepdf/corpus/veraPDF-corpus
+node scripts/golden.mjs diff .golden/before.json .golden/after-L3.json
+node scripts/golden.mjs diff .golden/before.json .golden/after-L3.json --detail '<検体キー>'
+```
+
+凍結するのは要約ではなく中身である。検体ごとに `subjects` / `violations` と、制約 1 行ずつの
+`[constraint, target, status, failures の sha, missing]`。失敗は `clauses` / `fact` / `actual` /
+`traceOnly` / `message` / `note` まで入れて sha を取る。**読めなかったファイルは落とさずに
+`error` として記録する** —— 暗号化 PDF がこれに当たり、撤去後に読めるようになったら
+「読めなかった → 読めた」の差として出る（沈黙して消えない）。
+版（`packageVersion` / テーブル版）は行ではなくヘッダで比べる。0.3.0 → 0.4.0 で全ファイルが
+差になると、判定の差が埋もれるため。
+
+`diff` は差を 2 つに分けて数える。**`pass → fail` / 読めた → 読めない / 行が消えた**は受入を
+満たさない差（0 件でなければならない）。それ以外は「帰属を書く差」で、
+`pass → not_applicable` と `pass → needs_external_fact` は §6 面 2 のとおり帰属付きで許容する。
+終了コードは 0 = 差なし / 1 = 差あり / 2 = 使い方の誤り・自己検査に失敗。
+
+**T-3 は 9 通りとも差として出た**（2026-08-28 実測）: 空振り検査（壊さなければ差 0 件）・
+status を 1 行変える・行を落とす・target を変える・`violations` を 1 増やす・`subjects` を
+1 増やす・検体を 1 つ落とす・**status を動かさずに failures の中身だけ変える**・
+読めなかった検体を「読めた」にする。
+
+#### 🔴 `fixtures/` だけでは 4 つの軸が 1 形しかない（2026-08-28 実測）
+
+`take` は毎回この一覧を印字する。fixtures 14 件だけで採ると:
+
+| 軸 | fixtures だけ | + veraPDF コーパス |
+|---|---|---|
+| 読めた / 読めなかった | ⚠ 1 形（全部読めた） | 2 形（暗号化検体が `error`） |
+| `origin > 0` | ⚠ 1 形 | 2 形 |
+| `/Encrypt` を持つ | ⚠ 1 形 | 2 形 |
+| 増分更新（`startxref` 2 個以上） | ⚠ 1 形 | 2 形 |
+| xref ストリーム | 2 形 | 2 形 |
+| 線形化 | ⚠ 1 形 | 2 形 |
+
+**1 形しかない軸は差を運べない**（[[fixtures-produce-only-one-shape]]）。
+`--set ../normativepdf/corpus/veraPDF-corpus`（2,917 件・gitignore。無ければ
+normativepdf 側で `npm run corpus:fetch`）を必ず足すこと。150 件で 1.4 秒・0.3 MB なので、
+全件でも 30 秒・6 MB 程度で収まる。
+
+制約の側の被覆も同じ表に出る。fixtures 14 件で **26 制約すべてが 1 回以上現れ、状態は
+4 つとも出る**（`pass` / `fail` / `not_applicable` / `needs_external_fact`）。
+一度も `fail` しない制約は fixtures だけで 3 件（`CT-FONT-3` / `CT-FONT-5` / `CT-META-2`）。
+
+ゴールデンの置き場は `.golden/`（gitignore 済み）。**撤去後に作り直さないこと** —
+作り直すと同じパーサ同士の比較になり、§6 面 3 の第 2 の読み手が消える。
+
 ### L1. normativepdf の §7.9 文字列層を消費する
 
 `decodeText()` × 6 を `decodeTextString` に置き換える。**この repo が第 1 消費者**
 （前段 handoff の受入面 4）。
+
+**前段 N は済んでいる**: normativepdf **0.9.0 が npm の latest**（2026-08-27 公開）。
+B1 が要る記号は 14/14 が 0.9.0 の公開面にある（`parsePdf` `decodeTextString` `parsePdfDate`
+`formatPdfDate` `dictGet` `dictGetRaw` `decodeStream` `CosDict` `CosArray` `CosName`
+`CosString` `CosStream` `CosRef` `readPageTree`。2026-08-28 実測）。
+自前の `parsePdfDate` の扱いは §3 の例外 2 を見ること。
 
 ### L2. `src/check.ts` の入口を `parsePdf` へ
 
@@ -148,7 +226,11 @@ writer の `tests/helpers/pdf-lib-reader.ts`（ADR-0004「二面で測る」）�
 
 ## 7. 決めること
 
-### 未決 1 — `FactExtractor` / `collectSubjects` の公開をどうするか
+### 未決 1 — `FactExtractor` / `collectSubjects` の公開 → **決着（2026-08-27・shuji）: 案 B**
+
+> 「実質の消費者 0 件なら、配慮せず最も正しい姿にする」。**export をやめて内部に閉じる。**
+> 版は **0.3.0 → 0.4.0**（0.x のまま minor + 告知。1.0.0 には上げない）。
+> 以下は決着の根拠として残す。
 
 3 案:
 
@@ -160,9 +242,9 @@ writer の `tests/helpers/pdf-lib-reader.ts`（ADR-0004「二面で測る」）�
 
 **B を推す。** 実際に触っている消費者が 0 件で、`checkBytes` / `checkFile` という
 バイト列を受ける入口が既にあるため。外部の拡張点として残す必要が立ってから A に戻せばよい。
-どの案でも **major を上げる**（0.3.0 → 0.4.0 ではなく 1.0.0 か、0.x のまま minor で告知）。
+どの案でも公開面が変わる。**0.x のまま minor + 告知**を採った（上記の決着）。
 
-### 未決 2 — `devDependencies` に pdf-lib を残すか
+### 未決 2 — `devDependencies` に pdf-lib を残すか（推し = 残さない）
 
 writer と verify は「テスト側の独立した読み手」として残している（ADR-0004 / GUARDS T-2）。
 **この repo では残さない**ことを推す。理由は §6 面 3 のとおりで、ここでの二面性は

@@ -6,3 +6,7 @@ dist/
 # Vitest temp files
 *.timestamp-*
 .DS_Store
+
+# L0 のゴールデン（pdf-lib が在るうちにしか採れない。撤去後に作り直さない）
+# コミットしないのは大きいから。**消さないこと** — B1 の受入はこれとの A/B で決まる
+.golden/

@@ -49,6 +49,9 @@
     "check": "biome check ./src ./tests",
     "check:fix": "biome check --fix ./src ./tests",
     "validate:tables": "node scripts/validate-tables.mjs",
+    "golden:take": "node scripts/golden.mjs take",
+    "golden:diff": "node scripts/golden.mjs diff",
+    "golden:t3": "node scripts/golden.mjs t3",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
