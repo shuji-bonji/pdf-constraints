@@ -6,9 +6,17 @@
  * ここではストリームを復号して **sfnt のテーブルディレクトリを直接読む**。
  */
 
+import {
+  asDict,
+  asRef,
+  asStream,
+  decodedBytes,
+  nameOf,
+  numberOf,
+  tryResolve,
+} from '@normativepdf/recover';
 import { type CosObject, dictGet, type PdfDocument } from 'normativepdf';
 import type { Facts, Subject } from '../types.js';
-import { asDict, asRef, asStream, decodedBytes, nameOf, numberOf, tryLookup } from './cos.js';
 
 /** sfnt / bare CFF のコンテナ種別とテーブル一覧を、復号後のバイト列から読む */
 function inspectProgram(bytes: Uint8Array): { container: string; tables: string[] } {
@@ -110,7 +118,7 @@ export async function extractEmbeddedFontFacts(doc: PdfDocument, given: Facts): 
     };
 
     if (streamValue !== undefined) {
-      const found = await tryLookup(doc, streamValue);
+      const found = await tryResolve(doc, streamValue);
       const stream = asStream(found.value);
       if (found.unreadable) {
         // 🔴 指し先はあるのに条文違反で受け取れなかった = **観測できなかった**。
@@ -128,21 +136,27 @@ export async function extractEmbeddedFontFacts(doc: PdfDocument, given: Facts): 
       } else {
         facts['stream.dict.Subtype'] = nameOf(dictGet(stream.dict, 'Subtype'));
         facts['stream.dict.Length1'] = numberOf(dictGet(stream.dict, 'Length1'));
-        try {
-          const decoded = await decodedBytes(doc, stream);
-          facts['stream.decodedLength'] = decoded.length;
-          const program = inspectProgram(decoded);
+        // `@normativepdf/recover` の `decodedBytes` は throw せず
+        // `{ bytes, unreadable }` を返す。**空のバイト列に畳まない**ので、
+        // 「中身が無い」と「読めなかった」がここでも分かれる。
+        const decoded = await decodedBytes(doc, stream).catch(() => ({
+          bytes: null,
+          unreadable: true,
+        }));
+        if (decoded.unreadable || decoded.bytes === null) {
+          // 復号できないフォントプログラムも「観測できなかった」側。上と同じ扱いにする
+          facts['descriptor.fontFileKey'] = 'unreadable';
+          facts['stream.dict.Subtype'] = null;
+          facts['stream.dict.Length1'] = null;
+        } else {
+          facts['stream.decodedLength'] = decoded.bytes.length;
+          const program = inspectProgram(decoded.bytes);
           facts['program.container'] = program.container;
           facts['program.sfntTables'] = program.tables;
           facts['program.isCffBased'] =
             program.container === 'otto' ||
             program.container === 'bareCFF' ||
             program.tables.includes('CFF ');
-        } catch {
-          // 復号できないフォントプログラムも「観測できなかった」側。上と同じ扱いにする
-          facts['descriptor.fontFileKey'] = 'unreadable';
-          facts['stream.dict.Subtype'] = null;
-          facts['stream.dict.Length1'] = null;
         }
       }
     }

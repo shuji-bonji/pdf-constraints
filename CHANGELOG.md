@@ -2,6 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-08-29
+
+PDFs are now opened through
+[`@normativepdf/recover`](https://www.npmjs.com/package/@normativepdf/recover) instead of
+calling `parsePdf` directly. The core refuses a file that violates the clauses — correct for a
+library, but it left this package with **nothing to say** about those files. **15 of 2,931
+specimens produced a `ParseError` and had not a single constraint applied to them.** They are
+now checked.
+
+### Added
+
+- `observation.scope` — how far the document could be read
+  (`recovered` / `chainStop` / `reconstructed` / `sections` / `objects` / … ).
+  🔴 **This is not a verdict.** When `reconstructed` is true the cross-reference table was
+  rebuilt rather than read from the file, and a reader of the results has to be told so:
+  "no failures" and "that part was never observed" are different statements.
+  The COS `/Encrypt` dictionary is not included (it would leak the internal representation).
+
+### Removed
+
+- `src/facts/cos.ts` (141 lines, internal). The COS reading helpers now come from
+  `@normativepdf/recover`, which is the same code pdf-verify-mcp reads through.
+  14 functions were duplicated by name across the two packages and **`has()` disagreed**:
+  this package applied ISO 32000-2 §7.3.7 ("a dictionary entry whose value is null shall be
+  treated the same as if the entry does not exist"), the other did not. The clause won;
+  `@normativepdf/recover` 0.1.1 carries the fix (ADR-0010, acceptance face 2).
+
+### 受入（A/B・検体 2,931 件）
+
+```
+base-0.4.0.json <-> after-recover.json
+  🔴 pass -> fail / 読めた -> 読めない / 行が消えた : 0 件
+  読めなかった -> 読めた                          : 15 件（受入 3 の予測どおり）
+  行が増えた                                     : 105 件（読めるようになった検体から出た行）
+  not_applicable -> pass                        : 5 件（同じ 15 件の中）
+  subjects 1 -> 10                              : 1 件
+```
+
+最後の 1 件は `_wout/dss-pades-5sigs-doctimestamp-w2.pdf` —— `/Prev 0` でチェーンが
+切れている文書で、条文どおりに読むと目録の向こうが見えない。回復方針で読み進めた結果、
+フォントの subject が 9 件増えた。**判定が緩んだ差は 1 件も無い。**
+
+単体 38 件・`validate:tables` 3 表・`check:engines` は緑。
+
 ## [0.4.0] - 2026-08-28
 
 `pdf-lib` is gone from the dependencies; PDFs are read through

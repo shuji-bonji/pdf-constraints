@@ -10,9 +10,19 @@
  * 観測できなかったものは `null`（= 未取得）にする。false に倒すと冤罪になる。
  */
 
+import {
+  asArray,
+  asDict,
+  asRef,
+  has,
+  nameOf,
+  numbersOf,
+  refKey,
+  resolved,
+  textOf,
+} from '@normativepdf/recover';
 import { type CosDict, type CosRef, dictGet, type PdfDocument, readPageTree } from 'normativepdf';
 import type { Facts, Subject } from '../types.js';
-import { asArray, asDict, asRef, has, lookup, nameOf, numbersOf, refKey, textOf } from './cos.js';
 
 /**
  * markup 注釈の subtype（§12.5.6.2 本文の列挙）。
@@ -120,7 +130,7 @@ async function apHasSubdictionary(doc: PdfDocument, ap: CosDict): Promise<boolea
   // AP の各エントリ（N / R / D）は「外観ストリーム」か「状態名 → ストリームの辞書」。
   // ストリームは kind: 'stream' なので、kind: 'dict' ならサブ辞書と判る。
   for (const [, value] of ap.entries) {
-    if (asDict(await lookup(doc, value)) !== null) return true;
+    if (asDict(await resolved(doc, value)) !== null) return true;
   }
   return false;
 }
@@ -139,15 +149,17 @@ async function collectPages(doc: PdfDocument): Promise<PageAnnots[]> {
   });
   const out: PageAnnots[] = [];
   for (const page of tree.pages) {
-    const annots = asArray(await lookup(doc, dictGet(page.dict, 'Annots')));
+    const annots = asArray(await resolved(doc, dictGet(page.dict, 'Annots')));
     const refs: (CosRef | null)[] = [];
     const dicts: CosDict[] = [];
     if (annots !== null) {
       for (const raw of annots.items) {
-        const resolved = asDict(await lookup(doc, raw));
-        if (resolved === null) continue;
+        // 変数名は `annot`。`resolved` は import した関数の名前で、被せると
+        // 同じ行で自分自身を呼ぼうとして落ちる
+        const annot = asDict(await resolved(doc, raw));
+        if (annot === null) continue;
         refs.push(asRef(raw));
-        dicts.push(resolved);
+        dicts.push(annot);
       }
     }
     out.push({ pageIndex: page.index, refs, dicts });
@@ -193,15 +205,15 @@ export async function extractAnnotationFacts(doc: PdfDocument, given: Facts): Pr
       const contents = textOf(dictGet(dict, 'Contents'));
       const colour = await numbersOf(doc, dictGet(dict, 'C'));
       const quadPoints = await numbersOf(doc, dictGet(dict, 'QuadPoints'));
-      const flags = await lookup(doc, dictGet(dict, 'F'));
-      const ap = asDict(await lookup(doc, dictGet(dict, 'AP')));
+      const flags = await resolved(doc, dictGet(dict, 'F'));
+      const ap = asDict(await resolved(doc, dictGet(dict, 'AP')));
       const irt = asRef(dictGet(dict, 'IRT'));
       const nm = textOf(dictGet(dict, 'NM'));
-      const action = asDict(await lookup(doc, dictGet(dict, 'A')));
+      const action = asDict(await resolved(doc, dictGet(dict, 'A')));
       const flagsValue =
-        flags !== undefined && (flags.kind === 'integer' || flags.kind === 'real')
-          ? flags.value
-          : null;
+        // 🔴 `resolved` は「無い」も「読めなかった」も `null` で返す（`lookup` は
+        // `undefined` だった）。`!== undefined` のままだと `null` を通して落ちる
+        flags !== null && (flags.kind === 'integer' || flags.kind === 'real') ? flags.value : null;
       const quadPointsWellFormed =
         quadPoints !== null && quadPoints.length > 0 && quadPoints.length % 8 === 0;
 

@@ -6,9 +6,17 @@
  * ここでの検査は近似である — テーブル側の `notMapped` にその旨を書いてある。
  */
 
+import {
+  asDict,
+  asStream,
+  decodedBytes,
+  has,
+  nameOf,
+  resolved,
+  textOf,
+} from '@normativepdf/recover';
 import { dictGet, type PdfDocument } from 'normativepdf';
 import type { Facts, Subject } from '../types.js';
-import { asDict, asStream, decodedBytes, has, lookup, nameOf, textOf } from './cos.js';
 
 export async function extractDocumentFacts(doc: PdfDocument, given: Facts): Promise<Subject> {
   const facts: Facts = {
@@ -24,7 +32,7 @@ export async function extractDocumentFacts(doc: PdfDocument, given: Facts): Prom
     ...given,
   };
 
-  const info = asDict(await lookup(doc, dictGet(doc.trailer, 'Info')));
+  const info = asDict(await resolved(doc, dictGet(doc.trailer, 'Info')));
   if (info !== null) {
     facts['doc.info.CreationDate'] = textOf(dictGet(info, 'CreationDate'));
     facts['doc.info.ModDate'] = textOf(dictGet(info, 'ModDate'));
@@ -42,14 +50,18 @@ export async function extractDocumentFacts(doc: PdfDocument, given: Facts): Prom
 
   const catalog = asDict(await doc.getCatalog().catch(() => undefined));
   const metadata =
-    catalog === null ? null : asStream(await lookup(doc, dictGet(catalog, 'Metadata')));
+    catalog === null ? null : asStream(await resolved(doc, dictGet(catalog, 'Metadata')));
   if (metadata !== null) {
     facts['doc.xmp.exists'] = true;
     facts['doc.xmp.dict.Type'] = nameOf(dictGet(metadata.dict, 'Type'));
     facts['doc.xmp.dict.Subtype'] = nameOf(dictGet(metadata.dict, 'Subtype'));
+    // `decodedBytes` は `{ bytes, unreadable }` を返す（throw しない）
+    const decoded = has(metadata.dict, 'Filter')
+      ? await decodedBytes(doc, metadata).catch(() => ({ bytes: null, unreadable: true }))
+      : { bytes: metadata.raw, unreadable: false };
     try {
-      const bytes = has(metadata.dict, 'Filter') ? await decodedBytes(doc, metadata) : metadata.raw;
-      const text = new TextDecoder().decode(bytes);
+      if (decoded.unreadable || decoded.bytes === null) throw new Error('unreadable');
+      const text = new TextDecoder().decode(decoded.bytes);
       facts['doc.xmp.hasXmpEnvelope'] =
         /<\?xpacket begin=/.test(text) && /<x:xmpmeta[\s>]/.test(text);
       facts['doc.xmp.CreateDate'] =

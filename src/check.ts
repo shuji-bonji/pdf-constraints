@@ -10,10 +10,11 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parsePdf, readPageTree } from 'normativepdf';
+import { type DocumentScope, openDocument } from '@normativepdf/recover';
+import { readPageTree } from 'normativepdf';
 import { evaluateConstraint, evaluateDocumentAsserts } from './evaluate.js';
 import { collectSubjects } from './facts/registry.js';
-import type { CheckReport, ConstraintTable, Facts, Scope } from './types.js';
+import type { CheckReport, ConstraintTable, Facts, ObservedScope, Scope } from './types.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const tablesDir = join(here, '..', 'tables');
@@ -38,6 +39,28 @@ export interface CheckOptions {
   given?: Record<string, unknown>;
 }
 
+/**
+ * `DocumentScope` から、出力に載せてよい項目だけを取り出す。
+ *
+ * 🔴 `encryptDict` は COS 辞書なので出さない（JSON にすると内部表現が出る）。
+ * 🔴 これは**判定ではない**。「どこまで読んだか」であって「適合しているか」ではない。
+ */
+function toObservedScope(scope: DocumentScope): ObservedScope {
+  return {
+    recovered: scope.recovered,
+    refusal: scope.refusal,
+    chainStop: scope.chainStop,
+    newestSectionUnreadable: scope.newestSectionUnreadable,
+    sections: scope.sections,
+    continuedPastStop: scope.continuedPastStop,
+    filledFromScan: scope.filledFromScan,
+    reconstructed: scope.reconstructed,
+    objects: scope.objects,
+    encrypted: scope.encrypted,
+    authenticated: scope.authenticated,
+  };
+}
+
 /** PDF のバイト列に制約テーブルを当てる */
 export async function checkBytes(
   bytes: Uint8Array,
@@ -50,7 +73,14 @@ export async function checkBytes(
 
   // `updateMetadata: false` は pdf-lib が Info を書き換えないようにするための引数だった。
   // normativepdf は読むだけなので要らない。暗号化文書は材料化の時点で復号される（§7.6）。
-  const doc = await parsePdf(bytes);
+  //
+  // 🔴 `parsePdf` ではなく `openDocument`（`@normativepdf/recover`）を通す。
+  // コアは条文に反する文書を受け取らずに例外を投げる。それは正しいが、そこで
+  // 止めると**その文書について何も言えない** —— 検体 2,931 件のうち 15 件が
+  // `ParseError` で 1 つの制約も当たっていなかった（2026-08-29 実測）。
+  // 回復方針で組み立てた文書は「どこまで読んだか」を `scope` が申告するので、
+  // 読み手は「違反が無い」と「そこを見ていない」を分けられる（ADR-0010 受入 3）。
+  const { doc, scope } = await openDocument(bytes);
   const scopes: Scope[] = tables.flatMap((t) => t.constraints.map((c) => c.appliesTo));
   const subjectsByScope = await collectSubjects(doc, scopes, given);
 
@@ -65,10 +95,11 @@ export async function checkBytes(
     packageVersion,
     tables: tables.map((t) => ({ name: t.name, version: t.version })),
     observation: {
-      xrefChain: doc.chainStop.kind,
-      objects: doc.xref.size,
+      xrefChain: scope.chainStop.kind,
+      objects: scope.objects,
       pagesReached: tree?.reached ?? false,
       pages: tree?.pages.length ?? 0,
+      scope: toObservedScope(scope),
     },
     subjects: [...subjectsByScope.values()].reduce((sum, list) => sum + list.length, 0),
     results: [],

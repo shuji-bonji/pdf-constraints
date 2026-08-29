@@ -150,6 +150,32 @@ export interface Observation {
   pagesReached: boolean;
   /** 到達できたページ数 */
   pages: number;
+  /**
+   * どこまで読んだか（`@normativepdf/recover` の `DocumentScope`）。
+   *
+   * 🔴 `recovered` / `reconstructed` が true のとき、**この文書はコアが条文どおりに
+   * 読めたものではない**。相互参照表はこちらが組み直したもので、ファイルが
+   * 持っているものではない。判定の読み手に伏せてよい事実ではない。
+   */
+  scope: ObservedScope;
+}
+
+/**
+ * 出力に載せる射程。`DocumentScope` から `encryptDict`（COS 辞書）を落としたもの。
+ * **判定ではない。**
+ */
+export interface ObservedScope {
+  recovered: boolean;
+  refusal: string | null;
+  chainStop: { kind: string; offset?: number; reason?: string };
+  newestSectionUnreadable: boolean;
+  sections: number | null;
+  continuedPastStop: boolean;
+  filledFromScan: number;
+  reconstructed: boolean;
+  objects: number;
+  encrypted: boolean;
+  authenticated: boolean;
 }
 
 export interface CheckReport {
