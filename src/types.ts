@@ -175,6 +175,11 @@ export interface ObservedScope {
   reconstructed: boolean;
   objects: number;
   encrypted: boolean;
+  /**
+   * 🔴 `encrypted && !authenticated` のとき、**オブジェクトは 1 つも読めていない。**
+   * このとき全制約は `needs_external_fact`（足りない fact は `given.password`）で、
+   * pass も fail も返さない。
+   */
   authenticated: boolean;
 }
 

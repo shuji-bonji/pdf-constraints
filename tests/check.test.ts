@@ -212,3 +212,38 @@ describe('レポートは判定の由来を含む', () => {
     expect(report.tables).toEqual([{ name: 'document-metadata', version: '1' }]);
   });
 });
+
+describe('鍵が導けない暗号化文書', () => {
+  const options = { domains: ['document-metadata'] };
+
+  it('パスワード付きの文書では、全制約が needs_external_fact になる（pass にならない）', async () => {
+    const report = await checkFile(fixture('ua-enc-aesv3-pw'), options);
+
+    // 復号器が付かないので fact はすべて null になる。0.5.0 ではその状態が
+    // 「違反 0 = pass」に見えていた（CT-META-3 が pass を返していた）。
+    expect(report.observation.scope?.encrypted).toBe(true);
+    expect(report.observation.scope?.authenticated).toBe(false);
+
+    expect(report.results.every((r) => r.status === 'needs_external_fact')).toBe(true);
+    expect(new Set(report.results.map((r) => r.missing))).toEqual(new Set(['given.password']));
+    expect(report.violations).toBe(0);
+  });
+
+  it('RC4 系（AESV2）でも同じ経路を通る', async () => {
+    const report = await checkFile(fixture('ua-enc-aesv2-pw'), options);
+    expect(report.results.every((r) => r.status === 'needs_external_fact')).toBe(true);
+  });
+
+  // 空振り検査の対: 「暗号化されている」だけでは落ちない。落とすのは
+  // 「鍵が導けない」ときだけである。この対が無いと、上の 2 件は
+  // `scope.encrypted` を見ているだけの分岐でも通ってしまう。
+  it('空パスワードで鍵が導ける暗号化文書は、通常どおり判定される', async () => {
+    const report = await checkFile(fixture('ua-enc-aesv3'), options);
+
+    expect(report.observation.scope?.encrypted).toBe(true);
+    expect(report.observation.scope?.authenticated).toBe(true);
+
+    expect(report.results.some((r) => r.status === 'pass')).toBe(true);
+    expect(report.results.filter((r) => r.status === 'needs_external_fact')).toHaveLength(0);
+  });
+});

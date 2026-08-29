@@ -2,6 +2,60 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-08-29
+
+An encrypted document whose key cannot be derived was reported as `pass`. It is now
+`needs_external_fact`.
+
+### Fixed
+
+- **`checkBytes` / `checkFile` no longer return `pass` for a document they could not read.**
+  When `/Encrypt` is present and the empty password does not produce the file key,
+  `openDocument` returns a document but hands out no objects — it does not serve ciphertext
+  with the face of plaintext (ADR-0008). Every fact then comes back `null`, every assert
+  guarded by `onlyWhen: exists` is skipped, and the result was **zero violations, therefore
+  `pass`**. Two specimens (`ua-enc-aesv3-pw.pdf`, `ua-enc-aesv2-pw.pdf`) reported
+  `CT-META-3: pass` on documents where not one object had been read.
+
+  A password is a fact that cannot be determined from the file alone. That is what
+  `needs_external_fact` is for. When `scope.encrypted` is true and `scope.authenticated` is
+  false, every constraint in the loaded tables now yields:
+
+  ```
+  status:  needs_external_fact
+  missing: given.password
+  target:  (document)
+  ```
+
+  A document that *is* encrypted but whose key the empty password does derive
+  (`ua-enc-aesv3.pdf`) is unaffected and is judged as before. The condition is
+  "the key could not be derived", not "the file is encrypted".
+
+### Added
+
+- `fixtures/ua-enc-aesv3-pw.pdf`, `fixtures/ua-enc-aesv2-pw.pdf`, `fixtures/ua-enc-aesv3.pdf`
+  — the axis was absent from this package's specimen set, so the first A/B over 2,934
+  specimens showed **0 differences** for a change that fixes two of them. The specimens came
+  from pdf-verify-mcp's `.golden/specimens`.
+
+### 受入（A/B・検体 2,934 件）
+
+```
+before-0.6.0.json <-> after-0.6.0.json
+  🔴 pass -> fail / 読めた -> 読めない / 行が消えた : 0 件
+  pass -> needs_external_fact                    : 2 件（CT-META-3 × 2、直したかったもの）
+  not_applicable -> needs_external_fact          : 10 件
+  行が増えた                                     : 40 件
+```
+
+52 行はいずれも `-pw` の 2 検体（26 制約 × 2）から出ている。他の 2,932 件は 1 行も動いていない。
+
+**空振り検査の対**: `ua-enc-aesv3.pdf`（暗号化されており、かつ空パスワードで鍵が導ける）は
+`pass:3 / not_applicable:3` のまま変わらない。分岐から `!scope.authenticated` を外すと
+この検体のテストだけが落ち、分岐ごと外すと `-pw` の 2 件のテストだけが落ちる。
+
+単体 41 件・`validate:tables` 3 表・`check:engines` は緑。
+
 ## [0.5.0] - 2026-08-29
 
 PDFs are now opened through

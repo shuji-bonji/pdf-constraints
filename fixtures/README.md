@@ -51,6 +51,21 @@ dc:title の同期は条文の義務ではない）。
 `QuadPoints` は両版とも同じ（Z 順 = `nonSimple`）なのも意図どおり。
 writer は 0.9.1 でも 0.16.0 でも同じ順序で書いており、これは意図的な逸脱である。
 
+## 暗号化 — 鍵が導けるかどうか（§7.6）
+
+`checkFile` が「読めなかった」と「違反が無かった」を取り違えないかを見る 3 件。
+出自は pdf-verify-mcp の `.golden/specimens`。
+
+| 検体 | `/Encrypt` | 空パスワードで鍵が導けるか | 期待 |
+| --- | --- | --- | --- |
+| `ua-enc-aesv3.pdf` | AESV3 | 導ける | 通常どおり判定される（`pass` / `not_applicable`） |
+| `ua-enc-aesv3-pw.pdf` | AESV3 | 導けない | 全制約 `needs_external_fact` / `missing: given.password` |
+| `ua-enc-aesv2-pw.pdf` | AESV2 | 導けない | 同上 |
+
+1 件目は**空振り検査の対**である。これが無いと、`scope.encrypted` を見ているだけの分岐でも
+残り 2 件のテストが通ってしまう。落とす条件は「暗号化されていること」ではなく
+「鍵が導けないこと」である。
+
 ## 再生成
 
 旧版は npm から取れる:

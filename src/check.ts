@@ -106,6 +106,31 @@ export async function checkBytes(
     violations: 0,
   };
 
+  // 🔴 **鍵が導けない暗号化文書では、オブジェクトを 1 つも読めていない。**
+  //
+  // `openDocument` は文書を返すが、復号器を付けないのでオブジェクトを渡さない
+  // （暗号文を平文の顔で配らないため・ADR-0008）。その状態で制約を当てると、
+  // fact がすべて null になり、`onlyWhen: exists` で守られた assert は飛ばされ、
+  // **違反 0 = pass** になる。「違反していない」と「その対象を観測していない」が
+  // 同じ顔をする（0.5.0 で実際にそうなった —— 検体 2 件で CT-META-3 が pass）。
+  //
+  // パスワードは**ファイル単体からは決定できない事実**である。この package が
+  // そういう事実に対して持っている答えは `needs_external_fact` で、これはその定義
+  // そのものにあたる。判定へ進まず、全制約をそこへ落とす。
+  if (scope.encrypted && !scope.authenticated) {
+    for (const table of tables) {
+      for (const constraint of table.constraints) {
+        report.results.push({
+          constraint: constraint.id,
+          target: '(document)',
+          status: 'needs_external_fact',
+          missing: 'given.password',
+        });
+      }
+    }
+    return report;
+  }
+
   for (const table of tables) {
     for (const constraint of table.constraints) {
       const subjects = subjectsByScope.get(constraint.appliesTo) ?? [];
