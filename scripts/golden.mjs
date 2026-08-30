@@ -111,6 +111,33 @@ async function take({ sets, label, givenPath, limit }) {
       packageVersion ??= report.packageVersion;
       entry.subjects = report.subjects;
       entry.violations = report.violations;
+      // 🔴 **判定だけ凍結すると、読めた範囲が動いても差 0 件になる。**
+      //
+      // 出自: 2026-08-30、`@normativepdf/recover` 0.1.1 -> 0.1.2。veraPDF の
+      // `6-1-2-t01-fail-a.pdf` が「組み直した 17 件」から「ファイルの表の 18 件」に
+      // 変わったのに、この A/B は差 0 件を出した。`observation` を記録していなかった
+      // からである。`observation` は `CheckReport` の公開項目で、0.5.0 で `scope` を
+      // 足したところでもある —— そこが動いたことを言えない計器は、その版の主張を
+      // 支えられない（[[instrument-must-pass-t3]] / [[observation-is-not-a-verdict]]）。
+      //
+      // `scope.refusal` は normativepdf のメッセージそのままで版が上がると言い回しが
+      // 変わるので、真偽だけを取る。
+      entry.observation = {
+        xrefChain: report.observation.xrefChain,
+        objects: report.observation.objects,
+        pagesReached: report.observation.pagesReached,
+        pages: report.observation.pages,
+        recovered: report.observation.scope?.recovered ?? null,
+        reconstructed: report.observation.scope?.reconstructed ?? null,
+        newestSectionUnreadable: report.observation.scope?.newestSectionUnreadable ?? null,
+        sections: report.observation.scope?.sections ?? null,
+        chainStop: report.observation.scope?.chainStop?.kind ?? null,
+        continuedPastStop: report.observation.scope?.continuedPastStop ?? null,
+        filledFromScan: report.observation.scope?.filledFromScan ?? null,
+        encrypted: report.observation.scope?.encrypted ?? null,
+        authenticated: report.observation.scope?.authenticated ?? null,
+        refused: (report.observation.scope?.refusal ?? null) !== null,
+      };
       entry.rows = report.results
         .map((r) => [
           r.constraint,
@@ -291,7 +318,29 @@ function diff(before, after) {
       continue;
     }
 
-    if (b.rowsSha === a.rowsSha && b.subjects === a.subjects && b.violations === a.violations) {
+    // 読めた範囲は判定より前に比べる。**判定が同じでも、見た範囲が違えば別の話である。**
+    // 片方が `observation` を持たないのは、その版のゴールデンがこの項目より前に
+    // 採られたということ。差ではないので黙る（版が違うと言えるのは header だけ）。
+    let observationMoved = false;
+    if (b.observation && a.observation) {
+      for (const field of Object.keys(a.observation)) {
+        if (JSON.stringify(b.observation[field]) === JSON.stringify(a.observation[field])) continue;
+        observationMoved = true;
+        bump(`observation.${field}`);
+        attributable += 1;
+        say(
+          'DIFF',
+          `observation.${field}: ${JSON.stringify(b.observation[field])} -> ${JSON.stringify(a.observation[field])}`,
+        );
+      }
+    }
+
+    if (
+      !observationMoved &&
+      b.rowsSha === a.rowsSha &&
+      b.subjects === a.subjects &&
+      b.violations === a.violations
+    ) {
       continue;
     }
     if (b.subjects !== a.subjects) {
@@ -363,6 +412,7 @@ function detail(before, after, key) {
   const a = after.specimens[key];
   if (!b || !a) return `そのキーの検体が無い: ${key}`;
   const pick = (x) => ({
+    observation: x.observation,
     subjects: x.subjects,
     violations: x.violations,
     statusCounts: x.statusCounts,
@@ -409,6 +459,17 @@ function t3(golden) {
     ['violations を 1 増やす', (g) => { g.specimens[key].violations += 1; }],
     ['subjects を 1 増やす', (g) => { g.specimens[key].subjects += 1; }],
     ['検体を 1 つ落とす', (g) => { delete g.specimens[key]; }],
+    // 🔴 判定を 1 つも動かさずに、読めた範囲だけを動かす。
+    // 0.6.1 より前のこの計器は、この変異を 1 件も報告しなかった。
+    ['observation.objects だけ変える（判定は動かさない）', (g) => {
+      g.specimens[key].observation.objects += 1;
+    }],
+    ['observation.reconstructed だけ変える（判定は動かさない）', (g) => {
+      g.specimens[key].observation.reconstructed = !g.specimens[key].observation.reconstructed;
+    }],
+    ['observation.pagesReached だけ変える（判定は動かさない）', (g) => {
+      g.specimens[key].observation.pagesReached = !g.specimens[key].observation.pagesReached;
+    }],
   ];
   if (withFail) {
     mutations.push(['failures の中身だけ変える（status は動かさない）', (g) => {

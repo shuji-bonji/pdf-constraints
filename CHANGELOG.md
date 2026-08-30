@@ -2,6 +2,69 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2026-08-30
+
+Reads through [`@normativepdf/recover`](https://www.npmjs.com/package/@normativepdf/recover)
+**0.1.2** instead of 0.1.1. One specimen stops being guessed at.
+
+### Changed
+
+- **依存: `@normativepdf/recover` 0.1.1 -> 0.1.2。** 0.1.2 は、`startxref` がどれも
+  読めない文書で**相互参照節そのものをファイルの中から探す**ようになった版である
+  （§7.5.8.1 —— 相互参照ストリームは `N G obj` で書かれた普通の間接オブジェクトなので
+  走査で見つかる）。
+
+  🔴 **この上げ方は任意ではない。** 0.6.0 は `@normativepdf/recover` を `0.1.1` に
+  **完全一致で固定**していた。消費側（pdf-verify-mcp）が 0.1.2 に上げても、npm は
+  この package の下に 0.1.1 を入れ子で置くので、`checkFile` は古い読み口を通り続ける。
+  実測: 入れ子に 0.1.1 を置くと `ua-broken-startxref.pdf` は `ParseError` のまま、
+  外して 0.1.2 を読ませると 11 オブジェクト・ページツリー到達になる。
+
+### Fixed（計器）
+
+- **`scripts/golden.mjs` が `observation` を凍結する。**
+
+  🔴 判定だけを凍結していたので、**読めた範囲が動いても差 0 件になっていた。**
+  この依存の上げを最初に測ったとき、A/B は差 0 件を出した。実際には veraPDF の
+  `6-1-2-t01-fail-a.pdf` が「組み直した 17 件」から「ファイルの表の 18 件」へ
+  変わっている。`observation` は `CheckReport` の公開項目で、0.5.0 で `scope` を
+  足したところでもある —— そこが動いたことを言えない計器は、その版の主張を支えられない。
+
+  凍結するのは `xrefChain` `objects` `pagesReached` `pages` と `scope` の
+  `recovered` / `reconstructed` / `newestSectionUnreadable` / `sections` /
+  `chainStop` / `continuedPastStop` / `filledFromScan` / `encrypted` /
+  `authenticated`、それに `refusal` の有無。`refusal` の**文面は取らない** ——
+  normativepdf のメッセージそのままで、版が上がれば言い回しが変わる。
+
+  T-3 に 3 件足した（8 -> 11）。**判定を 1 つも動かさずに読めた範囲だけを動かす**
+  変異で、0.6.0 の計器は 3 件とも差 0 件を返していた。
+
+  この項目を持たないゴールデン（0.6.0 以前）と突き合わせても差にはしない。
+
+### 受入（A/B・検体 2,934 件）
+
+`@normativepdf/recover` だけを 0.1.1 と 0.1.2 で入れ替え、同じ dist で採った。
+
+```
+before-rec012.json <-> after-rec012.json
+  🔴 pass -> fail / 読めた -> 読めない / 行が消えた : 0 件
+  帰属を書く差                                     : 5 件（1 検体）
+
+veraPDF-corpus/PDF_A-1b/6.1 File structure/6.1.2 File header/
+  veraPDF test suite 6-1-2-t01-fail-a.pdf
+    observation.xrefChain      "unreadable" -> "complete"
+    observation.objects        17           -> 18
+    observation.reconstructed  true         -> false
+    observation.sections       0            -> 1
+    observation.chainStop      "unreadable" -> "complete"
+```
+
+**判定（`rows`）は 1 行も動いていない。** 動いたのは射程の申告だけで、向きは
+「組み直した（推測）」から「ファイルが持っている表を読んだ」である。
+
+計器の T-3 は 11 件とも差を報告した。単体 41 件・`validate:tables` 3 表・
+`check:engines`・`typecheck` / `typecheck:tests` / `biome` / `build` は緑。
+
 ## [0.6.0] - 2026-08-29
 
 An encrypted document whose key cannot be derived was reported as `pass`. It is now
