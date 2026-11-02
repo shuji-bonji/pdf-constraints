@@ -40,11 +40,14 @@ jobs:
       - name: Validate constraint tables
         run: npm run validate:tables
 
-      - name: Run tests
-        run: npm test
-
+      # Build before the tests, as ci.yml does. tests/cli.test.ts runs the built
+      # CLI (dist/cli.js) on a specimen (SPEC-CONSTRAINTS-CHECK-006); with the
+      # tests first, the v0.7.0 run had no dist/ and stopped before publishing.
       - name: Build
         run: npm run build
+
+      - name: Run tests
+        run: npm test
 
       # package.json の version と push された tag (v*) が一致するかを検証。
       # tag だけ先行で打って package.json を上げ忘れる事故を防ぐ。
