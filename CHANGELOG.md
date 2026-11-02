@@ -2,7 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.0] - 2026-11-03
+## [0.7.1] - 2026-11-03
+
+The first published version with the 0.7.0 changes. **0.7.0 was tagged but never
+published to npm**: the publish workflow ran the tests before the build, and
+`SPEC-CONSTRAINTS-CHECK-006` — which runs the built CLI (`dist/cli.js`) on a specimen —
+failed because `dist/` did not exist yet. Nothing broken was released; the test named the
+missing file and stopped the run. The library, the CLI and the tables are the same as
+0.7.0 below.
+
+### Fixed
+
+- **The publish workflow builds before it tests**, in the same order as `ci.yml`. The design
+  of the 0.7.0 change said "CI runs `npm run build` before `npm test`" after reading
+  `ci.yml` only; `publish.yml` had the opposite order.
+
+## [0.7.0] - 2026-11-03 (not published)
 
 ### Fixed
 
