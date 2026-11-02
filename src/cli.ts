@@ -5,13 +5,15 @@
  * **exit code は 3 値**:
  *   0 = 違反なし（収録した制約の範囲で反証できなかった。適合の証明ではない）
  *   1 = 違反あり
- *   2 = 判定不能（引数不正・ファイルが開けない・評価に到達できない）
+ *   2 = 判定不能（引数不正・ファイルが開けない・評価に到達できない。
+ *       すべての結果が needs_external_fact のときもここ = SPEC-CONSTRAINTS-CHECK-005）
  *
  * 2 を分けているのは、**判定できなかったことを「合格」や「違反」と混ぜないため**。
  * exit 0 を成功と読んだ結果を取り違えた事例（pdfnative 監査 G-1）の再演を避ける。
  */
 
 import { checkFile, listTables } from './check.js';
+import { exitCodeFor } from './exit-code.js';
 import type { CheckReport } from './types.js';
 
 const USAGE = `Usage: pdf-constraints check <file.pdf> [options]
@@ -23,7 +25,8 @@ Options:
 
 Bundled tables: ${listTables().join(', ')}
 
-Exit: 0 = no violations found, 1 = violations found, 2 = could not decide`;
+Exit: 0 = no violations found, 1 = violations found,
+      2 = could not decide (incl. every constraint needing an external fact)`;
 
 function formatReport(report: CheckReport): string {
   const lines: string[] = [];
@@ -116,7 +119,7 @@ async function main(argv: string[]): Promise<number> {
   }
 
   console.log(asJson ? JSON.stringify(report, null, 2) : formatReport(report));
-  return report.violations > 0 ? 1 : 0;
+  return exitCodeFor(report);
 }
 
 main(process.argv.slice(2))

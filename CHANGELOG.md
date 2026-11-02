@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **The CLI no longer exits 0 when it decided nothing** (`SPEC-CONSTRAINTS-CHECK-005`/`006`,
+  OpenSpec change `cli-undecided-exit-code`). The exit codes promise 2 for "could not decide",
+  but for an encrypted file whose key cannot be derived every constraint is
+  `needs_external_fact` (0.6.0), violations are 0, and the CLI returned
+  `violations > 0 ? 1 : 0` — so `pdf-constraints check locked.pdf` exited 0, "no violations
+  found", without having evaluated a single constraint. The summary line said
+  `Not decided: N`, but a CI job reading only the exit code saw a pass. Nothing tested the CLI.
+  It now exits 2 when no result is `pass` / `fail` / `not_applicable` and at least one is
+  `needs_external_fact`. A report with some decided results keeps 0 / 1 by its violations;
+  an empty report keeps 0. The library API and the report are unchanged.
+
 ## [0.6.1] - 2026-08-30
 
 Reads through [`@normativepdf/recover`](https://www.npmjs.com/package/@normativepdf/recover)

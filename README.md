@@ -40,7 +40,7 @@ Three exit codes, because **"could not decide" must not be confused with pass or
 |---|---|
 | 0 | No violation found in the constraints checked (not proof of conformance) |
 | 1 | Violations found |
-| 2 | Could not decide (file unreadable, bad arguments, and so on) |
+| 2 | Could not decide (file unreadable, bad arguments, or no constraint could be decided — e.g. every one needs an external fact such as the password of an encrypted file) |
 
 As a library:
 
