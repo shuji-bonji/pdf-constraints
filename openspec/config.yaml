@@ -1,0 +1,50 @@
+schema: spec-driven
+
+# PDF family 共通の前提（pdf-agent-stack/docs/specs/31 付録 A）と、pdf-constraints 固有の境界ルール。
+# すべての成果物（proposal / specs / design / tasks）のプロンプトに <context> として注入される。
+# 🔴 rules の項目は必ず引用符で囲む。文中の「approved: 」のような「コロン + 空白」を YAML が入れ子と読み、
+#    openspec が「could not parse config.yaml」と警告して context と rules を丸ごと捨てる（pdf-reader-mcp で実際に起きた）。
+context: |
+  このリポジトリは PDF family の共有基盤ライブラリ（pdf-constraints。MCP サーバではない）。ISO 32000 の条文を
+  「ファイルが構造上どういう状態か」へ写像した制約テーブル（tables/*.json）と、その決定論的評価器を持つ。
+  MCP としての露出は pdf-verify-mcp の validate_clauses が担う。条文の原文は持たない（pdf-spec-mcp の仕事）。
+  verdict（推奨判定）は出さない（pdf-verify-mcp の evaluate_policy の仕事）。
+  fail が無いことは適合の証明ではない。制約ごとの状態（pass / fail / not_applicable / needs_external_fact）を分け、
+  判定できなかったこと（needs_external_fact など）を pass に丸めない。
+  制約そのもの（CT-FONT-1 などの ID・条文番号・述語）は tables/*.json が正本で、tables/schema.json と
+  npm run validate:tables が検査する。OpenSpec の正本（openspec/specs/）はテーブルの中身を写さず、
+  評価器の振る舞い（述語の意味・状態の決まり方・文書の読み方・レポートの形）を定める。
+  capability は振る舞いの単位で、evaluate（述語と制約の状態）と check（文書を読み、テーブルを当て、レポートを返す）。
+  要求の見出しは「### Requirement: SPEC-CONSTRAINTS-<機能>-<3 桁> 題」で、ID は `npx spec-ids next <capability>` で採る
+  （一度使った番号は再利用しない）。文末に（SHALL）を付ける。
+  テストは tests/**/*.test.ts（vitest）で、CI で全件が回る。受入テストの it / describe の名前に仕様 ID を書く。
+  `npx spec-ids check` が仕様 ID とテスト名を突き合わせ、CI（spec-gate）で止める。
+
+rules:
+  proposal:
+    - "先頭に front matter を置く（approved: と pr: は空のキー、implementation: required か none、targets: [capability, ...]）。approved と pr は人がマージの前に書く"
+    - "Capabilities には openspec/specs/ にある既存の capability 名（evaluate / check）をそのまま使う"
+    - "本文に「変わる振る舞い / 変わらない振る舞い / 対象外 / 人が判断すること」を書く"
+    - "制約テーブル（tables/*.json）を変える変更は、どの CT ID を足す・変える・外すかを書く。テーブルの版（version）を上げるかも書く"
+  specs:
+    - "各 Requirement の見出しは「### Requirement: SPEC-CONSTRAINTS-<機能>-<3 桁> 題」。ID は `npx spec-ids next <capability>` で採り、再利用しない"
+    - "各 Requirement に「#### Scenario:」を 1 つ以上書く。Scenario 名はそのままテスト名の後半になるので、WHEN / THEN が読める名前にする"
+    - "文末に（SHALL）を付ける。Purpose は 50 文字以上"
+    - "根拠は規格の節番号（例: ISO 32000-2 §7.9.4、§14.3.4）で書く。ライブラリ名だけを根拠にしない"
+    - "制約の状態を返す要求では、pass と fail に加えて、判定できないとき（not_applicable / needs_external_fact）に何を返すかも書く"
+    - "テーブルの個々の制約（CT-*）の中身は要求に写さない。写すと tables/*.json と二重の正本になる"
+  design:
+    - "ライブラリ（normativepdf・@normativepdf/recover）の制約と仕様の制約を分けて書く"
+    - "公開 API（src/index.ts の export）が変わるなら、型の差を書き、版を minor か major のどちらにするかを書く"
+  tasks:
+    - "テストの describe / it の名前に仕様 ID と Scenario 名を書くタスクを含める"
+    - "期待値を仕様 ID のために変えない"
+    - "最後に「npx openspec validate --all && npx spec-ids check が通る」を確かめるタスクを置く"
+    - "新しい capability を作る変更は、archive の後に正本の先頭へ front matter（spec_id / introduced_by）を書き足すタスクを置く（OpenSpec 1.14.1 は差分の front matter を写さない）"
+
+operations:
+  archive:
+    guidance:
+      - "archive の前に proposal.md の front matter の approved と pr が埋まっていることを確かめ、空なら止まって人に求める"
+      - "archive はマージの前に、同じ PR の中で行う（実装 PR は openspec/changes/<slug>/ の追加を pr-scope が通さない）"
+      - "archive の後に npx spec-ids check を実行し、OK を確かめる"
