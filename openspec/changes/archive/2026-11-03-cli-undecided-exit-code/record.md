@@ -17,6 +17,8 @@ PDF family の OpenSpec + spec-ids 導入（pdf-agent-stack `docs/specs/31`）�
 | テスト | `npm test` 41 → 46 件。受入テスト 5 件。005 の 4 件は変更前に「`exitCodeFor` が無い」で落ちた（入口が無いだけ）。006（`dist/cli.js` をパスワード付きの検体で起動）は変更前に終了コード 0 で落ちた。CI の一覧（check:engines・check・typecheck・typecheck:tests・validate:tables・build・test）は終了コード 0 |
 | 公開 API | 変更前後の `dist/index.d.ts` が同一 |
 | CLI の実測 | 変更後の `dist/cli.js` で、パスワード付きの AESV3 は 2、空パスワードで鍵が導ける AESV3（document-metadata）は 0、違反のある `bad-meta-0.9.1.pdf`（document-metadata）は 1 |
+| 承認と archive | 導入（`530d8e0`）と初版起こし PR #1（`approved: 2026-11-02`）でマージ。実装 PR #3 は main（`f97079b`）に rebase し、proposal.md に `approved: 2026-11-03`・`pr: 3` を書いて push。エージェントが PR #3 の head を取り込み、渡した commit からの差が承認欄 2 か所だけであることを確かめてから `openspec archive cli-undecided-exit-code --yes`（+2）。check は既存の capability なので、正本の front matter（`pr: 1`）はそのまま残った |
+| 寄り道 | 初版起こしの PR #1 は、最初に導入の commit を含んだまま出したので pr-scope が止めた（verify #26 と同じ形）。導入を署名し直して `chore/openspec-init` で push し、PR #1 に merge で取り込んだ後、導入を main に入れて通した。中身が同じ導入の commit が 2 つ（`8420955` と `530d8e0`）履歴に残る |
 | 維持の手間 | 仕様だけを変えた変更: 0 件 |
 
 ## 分かったこと
