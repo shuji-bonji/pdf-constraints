@@ -11,22 +11,22 @@ import { evaluateConstraint, evaluatePredicate, parsePdfDate } from '../src/eval
 import type { Constraint } from '../src/types.js';
 
 describe('parsePdfDate（ISO 32000-2 §7.9.4）', () => {
-  it('Z 表記と省略形を解釈する', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-001 Z 表記と省略形を解釈する', () => {
     expect(parsePdfDate('D:20260725221519Z')).toBe(Date.parse('2026-07-25T22:15:19Z'));
     // R-7.9.4-16: 月日は 01、他は 0 が既定値
     expect(parsePdfDate('D:2026')).toBe(Date.parse('2026-01-01T00:00:00Z'));
   });
 
-  it('UT オフセットを換算する（表記でなく時点で比べるため）', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-001 UT オフセットを換算する（表記でなく時点で比べるため）', () => {
     expect(parsePdfDate("D:20260726093000+09'00'")).toBe(Date.parse('2026-07-26T00:30:00Z'));
     expect(parsePdfDate("D:20260725133000-09'00'")).toBe(Date.parse('2026-07-25T22:30:00Z'));
   });
 
-  it('R-7.9.4-17: UT 情報が無ければ GMT とみなす', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-001 R-7.9.4-17: UT 情報が無ければ GMT とみなす', () => {
     expect(parsePdfDate('D:20260725221519')).toBe(Date.parse('2026-07-25T22:15:19Z'));
   });
 
-  it('文法違反と値域外は null（壊れた値を「等価」に倒さない）', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-001 文法違反と値域外は null（壊れた値を「等価」に倒さない）', () => {
     expect(parsePdfDate('2026/07/25 22:15:36')).toBeNull(); // D: が無い
     expect(parsePdfDate('D:20261325000000Z')).toBeNull(); // 13 月
     expect(parsePdfDate('D:20260725256119Z')).toBeNull(); // 25 時
@@ -51,43 +51,43 @@ describe('述語', () => {
     // biome-ignore lint/suspicious/noExplicitAny: テスト内でのみ op を文字列から渡す
     evaluatePredicate({ fact, op: op as any, value }, facts);
 
-  it('eq / in', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-002 eq / in', () => {
     expect(check('eq', 'a.name', 'FontFile2')).toBe(true);
     expect(check('eq', 'a.name', 'FontFile3')).toBe(false);
     expect(check('in', 'a.name', ['FontFile', 'FontFile2'])).toBe(true);
     expect(check('in', 'a.name', ['FontFile3'])).toBe(false);
   });
 
-  it('exists は「無いことの検査」にも使える（shall not 系）', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-003 exists は「無いことの検査」にも使える（shall not 系）', () => {
     expect(check('exists', 'a.name', true)).toBe(true);
     expect(check('exists', 'a.absent', true)).toBe(false);
     expect(check('exists', 'a.absent', false)).toBe(true);
   });
 
-  it('matches / superset', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-004 matches / superset', () => {
     expect(check('matches', 'a.name', '^Font')).toBe(true);
     expect(check('matches', 'a.len', '^120')).toBe(false); // 数値には当てない
     expect(check('superset', 'a.tables', ['glyf', 'head'])).toBe(true);
     expect(check('superset', 'a.tables', ['glyf', 'loca'])).toBe(false);
   });
 
-  it('eqFact は別の fact と突き合わせる', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-005 eqFact は別の fact と突き合わせる', () => {
     expect(check('eqFact', 'a.len', 'b.len')).toBe(true);
     expect(check('eqFact', 'a.len', 'a.absent')).toBe(false);
   });
 
-  it('dateEquiv は表記でなく時点で比べる', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-006 dateEquiv は表記でなく時点で比べる', () => {
     expect(check('dateEquiv', 'a.pdfDate', 'b.isoDate')).toBe(true);
     expect(check('dateEquiv', 'a.pdfDate', 'b.otherDate')).toBe(false); // 1 秒差
     expect(check('dateEquiv', 'a.name', 'b.isoDate')).toBe(false); // 日付でない
   });
 
-  it('allDistinct', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-007 allDistinct', () => {
     expect(check('allDistinct', 'a.tags')).toBe(true);
     expect(check('allDistinct', 'a.dupTags')).toBe(false);
   });
 
-  it('未知の op は例外にする（黙って違反にしない）', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-008 未知の op は例外にする（黙って違反にしない）', () => {
     expect(() => check('startsWith', 'a.name', 'Font')).toThrow(/unknown predicate op/);
   });
 });
@@ -104,19 +104,19 @@ describe('制約の状態遷移', () => {
     assert: [{ fact: 'doc.value', op: 'eq', value: 1, onFail: 'wrong' }],
   };
 
-  it('given が無ければ needs_external_fact（pass にも fail にも倒さない）', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-009 given が無ければ needs_external_fact（pass にも fail にも倒さない）', () => {
     const result = evaluateConstraint(constraint, { 'doc.value': 2 });
     expect(result.status).toBe('needs_external_fact');
     expect(result.missing).toBe('given.flag');
   });
 
-  it('given が false なら not_applicable', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-009 given が false なら not_applicable', () => {
     expect(evaluateConstraint(constraint, { 'given.flag': false, 'doc.value': 2 }).status).toBe(
       'not_applicable',
     );
   });
 
-  it('given が true なら実際に判定する', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-009 given が true なら実際に判定する', () => {
     expect(evaluateConstraint(constraint, { 'given.flag': true, 'doc.value': 1 }).status).toBe(
       'pass',
     );
@@ -125,7 +125,7 @@ describe('制約の状態遷移', () => {
     );
   });
 
-  it('onlyWhen を満たさない assert は検査自体を飛ばす', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-010 onlyWhen を満たさない assert は検査自体を飛ばす', () => {
     const conditional: Constraint = {
       ...constraint,
       when: [],
@@ -147,7 +147,7 @@ describe('制約の状態遷移', () => {
     );
   });
 
-  it('assertion の note は failure に載る（判定は変えないが誤読を防ぐ文脈）', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-011 assertion の note は failure に載る（判定は変えないが誤読を防ぐ文脈）', () => {
     const annotated: Constraint = {
       ...constraint,
       when: [],
@@ -162,12 +162,12 @@ describe('制約の状態遷移', () => {
     expect(evaluateConstraint(annotated, { 'doc.value': 1 }).status).toBe('pass');
   });
 
-  it('note の無い assertion は failure に note を作らない', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-011 note の無い assertion は failure に note を作らない', () => {
     const result = evaluateConstraint({ ...constraint, when: [] }, { 'doc.value': 2 });
     expect(result.failures?.[0]).not.toHaveProperty('note');
   });
 
-  it('subjectNote を持つ制約の failure は traceOnly になる', () => {
+  it('SPEC-CONSTRAINTS-EVALUATE-012 subjectNote を持つ制約の failure は traceOnly になる', () => {
     const traced: Constraint = {
       ...constraint,
       when: [],

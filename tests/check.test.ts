@@ -49,7 +49,7 @@ describe('font-embedding — writer B-14（W-2/3/4）の是正前後', () => {
     expect(report.violations).toBe(0);
   });
 
-  it('given.isSubset を渡さないと、サブセット前提の制約は判定に到達しない', async () => {
+  it('SPEC-CONSTRAINTS-CHECK-002 given.isSubset を渡さないと、サブセット前提の制約は判定に到達しない', async () => {
     const report = await checkFile(fixture('bad-0.13.1'), { domains: ['font-embedding'] });
     const subsetRule = report.results.find((r) => r.constraint === 'CT-FONT-3');
 
@@ -204,7 +204,7 @@ describe('annotation — writer の AP 義務 / CR 正規化の是正前後（§
 });
 
 describe('レポートは判定の由来を含む', () => {
-  it('パッケージ版とテーブル版を返す', async () => {
+  it('SPEC-CONSTRAINTS-CHECK-001 パッケージ版とテーブル版を返す', async () => {
     const report = await checkFile(fixture('synthetic-good'), { domains: ['document-metadata'] });
 
     // 「どの版のテーブルで判定したか」を言えないと決定論の意味がない（specs/18 §4.5）
@@ -216,7 +216,7 @@ describe('レポートは判定の由来を含む', () => {
 describe('鍵が導けない暗号化文書', () => {
   const options = { domains: ['document-metadata'] };
 
-  it('パスワード付きの文書では、全制約が needs_external_fact になる（pass にならない）', async () => {
+  it('SPEC-CONSTRAINTS-CHECK-003 パスワード付きの文書では、全制約が needs_external_fact になる（pass にならない）', async () => {
     const report = await checkFile(fixture('ua-enc-aesv3-pw'), options);
 
     // 復号器が付かないので fact はすべて null になる。0.5.0 ではその状態が
@@ -229,7 +229,7 @@ describe('鍵が導けない暗号化文書', () => {
     expect(report.violations).toBe(0);
   });
 
-  it('RC4 系（AESV2）でも同じ経路を通る', async () => {
+  it('SPEC-CONSTRAINTS-CHECK-003 RC4 系（AESV2）でも同じ経路を通る', async () => {
     const report = await checkFile(fixture('ua-enc-aesv2-pw'), options);
     expect(report.results.every((r) => r.status === 'needs_external_fact')).toBe(true);
   });
@@ -237,7 +237,7 @@ describe('鍵が導けない暗号化文書', () => {
   // 空振り検査の対: 「暗号化されている」だけでは落ちない。落とすのは
   // 「鍵が導けない」ときだけである。この対が無いと、上の 2 件は
   // `scope.encrypted` を見ているだけの分岐でも通ってしまう。
-  it('空パスワードで鍵が導ける暗号化文書は、通常どおり判定される', async () => {
+  it('SPEC-CONSTRAINTS-CHECK-004 空パスワードで鍵が導ける暗号化文書は、通常どおり判定される', async () => {
     const report = await checkFile(fixture('ua-enc-aesv3'), options);
 
     expect(report.observation.scope?.encrypted).toBe(true);
