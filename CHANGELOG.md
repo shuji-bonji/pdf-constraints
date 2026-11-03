@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.2] - 2026-11-03
+
+Dependency update only: **normativepdf 0.9.0 → 0.9.1** and **@normativepdf/recover 0.1.2 → 0.1.3**.
+The library API, the CLI, the exit codes and the tables are unchanged.
+
+### Changed
+
+- **normativepdf 0.9.1.** Its one change is how a text string (§7.9.2.2) is decoded: a UTF-16
+  surrogate that is not part of a pair now becomes U+FFFD instead of being passed through as
+  a lone surrogate. (A trailing odd byte and malformed UTF-8 were already U+FFFD in 0.9.0.)
+- **@normativepdf/recover 0.1.3**, which carries the same normativepdf 0.9.1. Both are pinned
+  exactly, so with recover left at 0.1.2 a consumer would have installed normativepdf 0.9.0
+  under recover next to 0.9.1 — two copies reading the same file. `npm ls normativepdf` now
+  shows a single, deduped 0.9.1.
+
+### Acceptance
+
+- Golden A/B (`scripts/golden.mjs`, the four fixed sets, 2,934 specimens, same `dist/`, only the
+  two dependencies swapped): **0 differences** — no pass → fail, no readable → unreadable, no
+  missing row, no attributable difference.
+- The golden freezes verdicts and the observation, not every decoded string, so the change was
+  also probed directly: of the 31,429 strings in the corpus, 367 start with the UTF-16BE BOM and
+  16 with the UTF-8 BOM, and **none contains an unpaired surrogate**. The 0 above therefore means
+  the corpus does not exercise the change, not that the change went unseen.
+
 ## [0.7.1] - 2026-11-03
 
 The first published version with the 0.7.0 changes. **0.7.0 was tagged but never
